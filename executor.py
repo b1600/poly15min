@@ -152,28 +152,27 @@ def redeem_positions(condition_id: str, outcome_index: int) -> str:
     )
 
 
+_PUSD = "0xc011a7e12a19f7b1f670d46f03b03f3342e82dfb"
+_PUSD_ABI = [{"inputs":[{"name":"account","type":"address"}],"name":"balanceOf","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"}]
+
 def get_usdc_balance(client) -> float:
-    """Return the Polymarket CLOB trading balance in USDC.
+    """Return the Polymarket trading balance in pUSD.
 
-    Do NOT call update_balance_allowance before this. That endpoint causes
-    the CLOB server to overwrite its cached deposit balance with the raw
-    on-chain USDC value in base units (6 decimals), e.g. 0.22 USDC becomes
-    216791 raw units which the code then misreads as $216,791.
-
-    Polymarket normally returns the balance as a decimal dollar string like
-    "5.170000". If update_balance_allowance has previously been called and
-    the cache is stale, the value may come back as a bare integer string
-    ("216791"). We detect this case and convert.
+    Polymarket migrated collateral from USDC.e to pUSD. The CLOB API's
+    get_balance_allowance consistently returns 0 for pUSD accounts, so we
+    read the on-chain pUSD balance of the proxy wallet directly instead.
+    The proxy's pUSD has unlimited approval for the new exchange contracts,
+    so whatever is in the wallet is immediately available to trade.
     """
-    resp = client.get_balance_allowance(BalanceAllowanceParams(asset_type=AssetType.COLLATERAL))
-    raw = resp.get("balance", 0)
-    value = float(raw)
-    # Detect raw USDC base-unit format: no decimal point and suspiciously large.
-    # "5.170000"  → has '.'  → already in dollars, no conversion needed.
-    # "216791"    → no '.'   → base units with 6 decimals → divide by 1e6.
-    if value > 1000 and "." not in str(raw):
-        return value / 1_000_000
-    return value
+    from web3 import Web3
+    rpc = os.getenv(
+        "POLYGON_RPC",
+        "https://polygon-mainnet.g.alchemy.com/v2/" + os.getenv("ALCHEMY_API_KEY", ""),
+    )
+    w3 = Web3(Web3.HTTPProvider(rpc))
+    proxy = Web3.to_checksum_address(os.getenv("POLY_FUNDER_ADDRESS"))
+    pusd = w3.eth.contract(address=Web3.to_checksum_address(_PUSD), abi=_PUSD_ABI)
+    return pusd.functions.balanceOf(proxy).call() / 1_000_000
 
 def init_client():
     creds = ApiCreds(
