@@ -1,0 +1,9 @@
+py-clob-client==0.34.6
+websockets
+requests
+python-dotenv
+web3
+boto3
+duckdb
+numpy
+pandas
