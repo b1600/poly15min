@@ -1,7 +1,5 @@
 # executor.py
-from py_clob_client.client import ClobClient
-from py_clob_client.clob_types import ApiCreds, OrderArgs, MarketOrderArgs, OrderType, BalanceAllowanceParams, AssetType
-from py_clob_client.order_builder.constants import BUY
+from py_clob_client_v2 import ClobClient, ApiCreds, OrderArgs, MarketOrderArgs, OrderType, OrderPayload, Side
 from dotenv import load_dotenv
 import logging
 import os
@@ -199,7 +197,7 @@ def place_maker_order(client, token_id, price, size):
     order_args = OrderArgs(
         price=price,
         size=size,        # number of shares
-        side=BUY,
+        side=Side.BUY,
         token_id=token_id,
     )
     signed_order = client.create_order(order_args)
@@ -234,7 +232,7 @@ def place_market_order(client, token_id, amount, price=0):
     market_args = MarketOrderArgs(
         token_id=token_id,
         amount=amount,
-        side=BUY,
+        side=Side.BUY,
         order_type=OrderType.FAK,
         price=price,
     )
@@ -256,7 +254,7 @@ def place_ioc_order(client, token_id, amount, price=0):
     market_args = MarketOrderArgs(
         token_id=token_id,
         amount=amount,
-        side=BUY,
+        side=Side.BUY,
         order_type=OrderType.FAK,
         price=price,
     )
@@ -266,8 +264,8 @@ def place_ioc_order(client, token_id, amount, price=0):
 
 def cancel_order(client, order_id):
     """Cancel a resting maker order. Raises if the API did not confirm cancellation."""
-    resp = client.cancel(order_id)
-    if not resp or order_id not in resp.get("canceled", []):
+    resp = client.cancel_order(OrderPayload(orderID=order_id))
+    if not resp:
         raise RuntimeError(f"Cancel may have failed for order {order_id}: {resp}")
     return resp
 

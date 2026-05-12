@@ -1160,6 +1160,8 @@ async def main():
     except (KeyboardInterrupt, SystemExit, asyncio.CancelledError):
         pass
     finally:
+        import signal
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
         await bot.price_feed.stop()
         bot.print_session_stats()
         bot.save_log()
@@ -1167,4 +1169,7 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass
