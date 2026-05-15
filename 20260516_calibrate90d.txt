@@ -1,0 +1,247 @@
+Fetching 90 days of BTC/USDT 1m klines from Binance...
+  Got 129,600 1-minute bars
+  8,639 15-min windows  (8,637 non-flat)
+  Base rate: 4350/8637 = 0.504 Up
+
+========================================================================
+MODEL CALIBRATION: estimated P(win) vs actual win rate
+(bet direction = whichever side the model favors)
+========================================================================
+
+  T- 60s elapsed (T-840s remaining):
+    Est P       N   Actual%   ±StdErr     Bias  Status
+  -------  ------  --------  --------  -------  --------------------
+     0.35      41     0.756    0.0671   +0.406  
+     0.40     257     0.685    0.0290   +0.285  <-- MISCALIBRATED
+     0.45    1549     0.623    0.0123   +0.173  <-- MISCALIBRATED
+     0.50    4905     0.540    0.0071   +0.040  <-- slight bias
+     0.55    1505     0.635    0.0124   +0.085  <-- MISCALIBRATED
+     0.60     253     0.739    0.0276   +0.139  <-- MISCALIBRATED
+     0.65      62     0.774    0.0531   +0.124  <-- MISCALIBRATED
+
+  T-120s elapsed (T-780s remaining):
+    Est P       N   Actual%   ±StdErr     Bias  Status
+  -------  ------  --------  --------  -------  --------------------
+     0.10     158     0.652    0.0379   +0.552  <-- MISCALIBRATED
+     0.20      57     0.684    0.0616   +0.484  <-- MISCALIBRATED
+     0.25      69     0.739    0.0529   +0.489  <-- MISCALIBRATED
+     0.30      98     0.694    0.0466   +0.394  <-- MISCALIBRATED
+     0.35     179     0.698    0.0343   +0.348  <-- MISCALIBRATED
+     0.40     351     0.707    0.0243   +0.307  <-- MISCALIBRATED
+     0.45    1505     0.664    0.0122   +0.214  <-- MISCALIBRATED
+     0.50    3676     0.581    0.0081   +0.081  <-- MISCALIBRATED
+     0.55    1559     0.651    0.0121   +0.101  <-- MISCALIBRATED
+     0.60     389     0.702    0.0232   +0.102  <-- MISCALIBRATED
+     0.65     146     0.678    0.0387   +0.028  
+     0.70     115     0.617    0.0453   -0.083  
+     0.75      59     0.678    0.0608   -0.072  
+     0.80     247     0.607    0.0311   -0.193  <-- MISCALIBRATED
+
+  T-180s elapsed (T-720s remaining):
+    Est P       N   Actual%   ±StdErr     Bias  Status
+  -------  ------  --------  --------  -------  --------------------
+     0.30      42     0.810    0.0606   +0.510  
+     0.35      98     0.755    0.0434   +0.405  <-- MISCALIBRATED
+     0.40     345     0.794    0.0218   +0.394  <-- MISCALIBRATED
+     0.45    1674     0.715    0.0110   +0.265  <-- MISCALIBRATED
+     0.50    4104     0.574    0.0077   +0.074  <-- MISCALIBRATED
+     0.55    1784     0.709    0.0108   +0.159  <-- MISCALIBRATED
+     0.60     302     0.772    0.0242   +0.172  <-- MISCALIBRATED
+     0.65     109     0.771    0.0403   +0.121  <-- MISCALIBRATED
+     0.70      34     0.647    0.0820   -0.053  
+     0.80      52     0.692    0.0640   -0.108  
+
+  T-240s elapsed (T-660s remaining):
+    Est P       N   Actual%   ±StdErr     Bias  Status
+  -------  ------  --------  --------  -------  --------------------
+     0.35      86     0.802    0.0429   +0.452  <-- MISCALIBRATED
+     0.40     357     0.807    0.0209   +0.407  <-- MISCALIBRATED
+     0.45    1853     0.736    0.0102   +0.286  <-- MISCALIBRATED
+     0.50    3867     0.582    0.0079   +0.082  <-- MISCALIBRATED
+     0.55    1930     0.732    0.0101   +0.182  <-- MISCALIBRATED
+     0.60     379     0.794    0.0208   +0.194  <-- MISCALIBRATED
+     0.65      67     0.806    0.0483   +0.156  <-- MISCALIBRATED
+
+  T-300s elapsed (T-600s remaining):
+    Est P       N   Actual%   ±StdErr     Bias  Status
+  -------  ------  --------  --------  -------  --------------------
+     0.35      85     0.929    0.0278   +0.579  <-- MISCALIBRATED
+     0.40     416     0.851    0.0175   +0.451  <-- MISCALIBRATED
+     0.45    1819     0.769    0.0099   +0.319  <-- MISCALIBRATED
+     0.50    3841     0.560    0.0080   +0.060  <-- MISCALIBRATED
+     0.55    1914     0.760    0.0098   +0.210  <-- MISCALIBRATED
+     0.60     417     0.875    0.0162   +0.275  <-- MISCALIBRATED
+     0.65      81     0.889    0.0349   +0.239  <-- MISCALIBRATED
+
+  T-360s elapsed (T-540s remaining):
+    Est P       N   Actual%   ±StdErr     Bias  Status
+  -------  ------  --------  --------  -------  --------------------
+     0.35     103     0.883    0.0316   +0.533  <-- MISCALIBRATED
+     0.40     443     0.898    0.0144   +0.498  <-- MISCALIBRATED
+     0.45    1985     0.782    0.0093   +0.332  <-- MISCALIBRATED
+     0.50    3438     0.584    0.0084   +0.084  <-- MISCALIBRATED
+     0.55    2026     0.765    0.0094   +0.215  <-- MISCALIBRATED
+     0.60     480     0.890    0.0143   +0.290  <-- MISCALIBRATED
+     0.65      97     0.918    0.0279   +0.268  <-- MISCALIBRATED
+
+  T-420s elapsed (T-480s remaining):
+    Est P       N   Actual%   ±StdErr     Bias  Status
+  -------  ------  --------  --------  -------  --------------------
+     0.30      36     0.972    0.0274   +0.672  
+     0.35     133     0.947    0.0194   +0.597  <-- MISCALIBRATED
+     0.40     591     0.904    0.0121   +0.504  <-- MISCALIBRATED
+     0.45    2041     0.800    0.0089   +0.350  <-- MISCALIBRATED
+     0.50    3000     0.596    0.0090   +0.096  <-- MISCALIBRATED
+     0.55    2042     0.787    0.0091   +0.237  <-- MISCALIBRATED
+     0.60     626     0.914    0.0112   +0.314  <-- MISCALIBRATED
+     0.65     132     0.939    0.0208   +0.289  <-- MISCALIBRATED
+
+  T-480s elapsed (T-420s remaining):
+    Est P       N   Actual%   ±StdErr     Bias  Status
+  -------  ------  --------  --------  -------  --------------------
+     0.30      53     0.981    0.0187   +0.681  <-- MISCALIBRATED
+     0.35     158     0.911    0.0226   +0.561  <-- MISCALIBRATED
+     0.40     742     0.938    0.0089   +0.538  <-- MISCALIBRATED
+     0.45    1986     0.806    0.0089   +0.356  <-- MISCALIBRATED
+     0.50    2700     0.586    0.0095   +0.086  <-- MISCALIBRATED
+     0.55    2018     0.819    0.0086   +0.269  <-- MISCALIBRATED
+     0.60     744     0.926    0.0096   +0.326  <-- MISCALIBRATED
+     0.65     181     0.967    0.0133   +0.317  <-- MISCALIBRATED
+     0.70      39     1.000    0.0000   +0.300  
+
+  T-540s elapsed (T-360s remaining):
+    Est P       N   Actual%   ±StdErr     Bias  Status
+  -------  ------  --------  --------  -------  --------------------
+     0.30      56     0.946    0.0301   +0.646  <-- MISCALIBRATED
+     0.35     238     0.971    0.0110   +0.621  <-- MISCALIBRATED
+     0.40     879     0.942    0.0079   +0.542  <-- MISCALIBRATED
+     0.45    1871     0.831    0.0087   +0.381  <-- MISCALIBRATED
+     0.50    2376     0.590    0.0101   +0.090  <-- MISCALIBRATED
+     0.55    1983     0.817    0.0087   +0.267  <-- MISCALIBRATED
+     0.60     883     0.928    0.0087   +0.328  <-- MISCALIBRATED
+     0.65     247     0.992    0.0057   +0.342  <-- MISCALIBRATED
+     0.70      66     0.970    0.0211   +0.270  <-- MISCALIBRATED
+
+  T-600s elapsed (T-300s remaining):
+    Est P       N   Actual%   ±StdErr     Bias  Status
+  -------  ------  --------  --------  -------  --------------------
+     0.30      92     0.989    0.0108   +0.689  <-- MISCALIBRATED
+     0.35     328     0.979    0.0080   +0.629  <-- MISCALIBRATED
+     0.40    1007     0.950    0.0068   +0.550  <-- MISCALIBRATED
+     0.45    1763     0.844    0.0086   +0.394  <-- MISCALIBRATED
+     0.50    2060     0.612    0.0107   +0.112  <-- MISCALIBRATED
+     0.55    1923     0.832    0.0085   +0.282  <-- MISCALIBRATED
+     0.60     950     0.947    0.0072   +0.347  <-- MISCALIBRATED
+     0.65     353     0.977    0.0079   +0.327  <-- MISCALIBRATED
+     0.70      99     1.000    0.0000   +0.300  <-- MISCALIBRATED
+     0.75      30     1.000    0.0000   +0.250  
+
+  T-660s elapsed (T-240s remaining):
+    Est P       N   Actual%   ±StdErr     Bias  Status
+  -------  ------  --------  --------  -------  --------------------
+     0.25      41     1.000    0.0000   +0.750  
+     0.30     133     1.000    0.0000   +0.700  <-- MISCALIBRATED
+     0.35     476     0.987    0.0051   +0.637  <-- MISCALIBRATED
+     0.40    1065     0.961    0.0060   +0.561  <-- MISCALIBRATED
+     0.45    1650     0.850    0.0088   +0.400  <-- MISCALIBRATED
+     0.50    1808     0.600    0.0115   +0.100  <-- MISCALIBRATED
+     0.55    1733     0.824    0.0091   +0.274  <-- MISCALIBRATED
+     0.60    1043     0.959    0.0062   +0.359  <-- MISCALIBRATED
+     0.65     450     0.996    0.0031   +0.346  <-- MISCALIBRATED
+     0.70     170     0.994    0.0059   +0.294  <-- MISCALIBRATED
+     0.75      39     1.000    0.0000   +0.250  
+
+  T-720s elapsed (T-180s remaining):
+    Est P       N   Actual%   ±StdErr     Bias  Status
+  -------  ------  --------  --------  -------  --------------------
+     0.25     105     1.000    0.0000   +0.750  <-- MISCALIBRATED
+     0.30     275     0.996    0.0036   +0.696  <-- MISCALIBRATED
+     0.35     582     0.993    0.0034   +0.643  <-- MISCALIBRATED
+     0.40    1070     0.960    0.0060   +0.560  <-- MISCALIBRATED
+     0.45    1456     0.838    0.0097   +0.388  <-- MISCALIBRATED
+     0.50    1488     0.618    0.0126   +0.118  <-- MISCALIBRATED
+     0.55    1528     0.830    0.0096   +0.280  <-- MISCALIBRATED
+     0.60    1055     0.947    0.0069   +0.347  <-- MISCALIBRATED
+     0.65     601     0.983    0.0052   +0.333  <-- MISCALIBRATED
+     0.70     306     1.000    0.0000   +0.300  <-- MISCALIBRATED
+     0.75      98     1.000    0.0000   +0.250  <-- MISCALIBRATED
+     0.80      32     1.000    0.0000   +0.200  
+
+  T-780s elapsed (T-120s remaining):
+    Est P       N   Actual%   ±StdErr     Bias  Status
+  -------  ------  --------  --------  -------  --------------------
+     0.15      32     1.000    0.0000   +0.850  
+     0.20     100     1.000    0.0000   +0.800  <-- MISCALIBRATED
+     0.25     199     1.000    0.0000   +0.750  <-- MISCALIBRATED
+     0.30     420     0.993    0.0041   +0.693  <-- MISCALIBRATED
+     0.35     737     0.988    0.0040   +0.638  <-- MISCALIBRATED
+     0.40     986     0.968    0.0056   +0.568  <-- MISCALIBRATED
+     0.45    1149     0.836    0.0109   +0.386  <-- MISCALIBRATED
+     0.50    1208     0.608    0.0140   +0.108  <-- MISCALIBRATED
+     0.55    1233     0.829    0.0107   +0.279  <-- MISCALIBRATED
+     0.60    1018     0.950    0.0068   +0.350  <-- MISCALIBRATED
+     0.65     759     0.984    0.0045   +0.334  <-- MISCALIBRATED
+     0.70     423     0.991    0.0047   +0.291  <-- MISCALIBRATED
+     0.75     231     1.000    0.0000   +0.250  <-- MISCALIBRATED
+     0.80     129     1.000    0.0000   +0.200  <-- MISCALIBRATED
+
+  T-840s elapsed (T- 60s remaining):
+    Est P       N   Actual%   ±StdErr     Bias  Status
+  -------  ------  --------  --------  -------  --------------------
+     0.10     100     1.000    0.0000   +0.900  <-- MISCALIBRATED
+     0.15     149     1.000    0.0000   +0.850  <-- MISCALIBRATED
+     0.20     305     1.000    0.0000   +0.800  <-- MISCALIBRATED
+     0.25     393     0.992    0.0044   +0.742  <-- MISCALIBRATED
+     0.30     600     0.993    0.0033   +0.693  <-- MISCALIBRATED
+     0.35     699     0.980    0.0053   +0.630  <-- MISCALIBRATED
+     0.40     809     0.958    0.0071   +0.558  <-- MISCALIBRATED
+     0.45     831     0.810    0.0136   +0.360  <-- MISCALIBRATED
+     0.50     759     0.636    0.0175   +0.136  <-- MISCALIBRATED
+     0.55     844     0.840    0.0126   +0.290  <-- MISCALIBRATED
+     0.60     866     0.932    0.0086   +0.332  <-- MISCALIBRATED
+     0.65     715     0.980    0.0052   +0.330  <-- MISCALIBRATED
+     0.70     585     0.995    0.0030   +0.295  <-- MISCALIBRATED
+     0.75     469     0.996    0.0030   +0.246  <-- MISCALIBRATED
+     0.80     513     1.000    0.0000   +0.200  <-- MISCALIBRATED
+
+========================================================================
+OVERALL WIN RATE BY ENTRY TIME (all prob buckets combined)
+========================================================================
+  Secs left    Trades     Win%   Edge vs 50%
+  ---------  --------  -------  ------------
+        840      8637    0.586        +0.086 <-- has edge
+        780      8637    0.630        +0.130 <-- has edge
+        720      8637    0.654        +0.154 <-- has edge
+        660      8637    0.674        +0.174 <-- has edge
+        600      8637    0.686        +0.186 <-- has edge
+        540      8637    0.715        +0.215 <-- has edge
+        480      8637    0.747        +0.247 <-- has edge
+        420      8637    0.769        +0.269 <-- has edge
+        360      8637    0.794        +0.294 <-- has edge
+        300      8637    0.825        +0.325 <-- has edge
+        240      8637    0.841        +0.341 <-- has edge
+        180      8637    0.864        +0.364 <-- has edge
+        120      8637    0.886        +0.386 <-- has edge
+         60      8637    0.919        +0.419 <-- has edge
+
+========================================================================
+RAW SIGNAL: BTC delta (%) at T-360s → actual Up win rate
+(positive delta = BTC moved up; shows if momentum persists)
+========================================================================
+    Delta%       N   Actual Up%     Edge
+  --------  ------  -----------  -------
+     -0.60      40        0.000   -0.500
+     -0.50      55        0.036   -0.464
+     -0.40     143        0.028   -0.472
+     -0.30     316        0.038   -0.462
+     -0.20     671        0.080   -0.420
+     -0.10    1674        0.175   -0.325
+     +0.00    2641        0.507   +0.007
+     +0.10    1766        0.815   +0.315
+     +0.20     711        0.917   +0.417
+     +0.30     283        0.965   +0.465
+     +0.40     121        0.950   +0.450
+     +0.50      61        1.000   +0.500
+     +0.60      44        0.977   +0.477
+
+  (matplotlib not installed — skipping plot)

@@ -117,7 +117,7 @@ REDEEM_POLL_INTERVAL = 600   # seconds between Data API polls for oracle readine
 REDEEM_MAX_AGE = 86400       # give up on a pending redemption after 24h
 
 CALIBRATION_TABLE_PATH = "calibration_table.json"
-CALIBRATION_DAYS = 60        # days of kline history used for each calibration run
+CALIBRATION_DAYS = 90        # days of kline history used for each calibration run
 CALIBRATION_INTERVAL = 86400 # recalibrate every 24h
 
 
