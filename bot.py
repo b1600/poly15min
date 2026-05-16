@@ -657,7 +657,7 @@ class TradingBot:
                 t for t in self.window.trades
                 if t.get("status") == "pending"
                 and t.get("order_id")
-                and t.get("strategy") in ("momentum", "fade")
+                and t.get("strategy") in ("momentum",)
             ]
 
             if surviving:
@@ -665,7 +665,7 @@ class TradingBot:
                 for trade in self.window.trades:
                     if trade.get("status") != "pending" or not trade.get("order_id"):
                         continue
-                    if trade.get("strategy") in ("momentum", "fade"):
+                    if trade.get("strategy") in ("momentum",):
                         log.info(
                             f"CLEANUP | {trade.get('strategy','?')} GTC left open "
                             f"(+{RESOLUTION_WAIT}s extra lifetime) | "
@@ -740,7 +740,7 @@ class TradingBot:
             for trade in window.trades:
                 if trade.get("status") != "pending" or not trade.get("order_id"):
                     continue
-                if trade.get("strategy") not in ("momentum", "fade"):
+                if trade.get("strategy") not in ("momentum",):
                     continue
                 try:
                     info = get_order_status(self.client, trade["order_id"])
@@ -833,9 +833,10 @@ class TradingBot:
             side = trade["side"]
             price = trade["price"]
             # For GTC orders, use actual filled size if available (may be partial fill)
+            # size_matched from the CLOB API is the number of shares filled, not dollars.
             if trade.get("use_maker") and "size_matched" in trade:
-                bet = trade["size_matched"]
-                shares = bet / price if price > 0 else 0
+                shares = trade["size_matched"]              # filled share count from CLOB
+                bet = round(shares * price, 2)              # actual USDC spent
             else:
                 bet = trade["bet_amount"]
                 shares = trade.get("shares", bet / price if price > 0 else 0)

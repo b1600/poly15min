@@ -564,7 +564,7 @@ class CombinedStrategy:
                 return ("momentum", trade)
 
         trade = self.fade.evaluate(market, bankroll, price_feed, seconds_remaining)
-        if trade:
+        if trade and trade["edge"] >= 0.07:
             return ("fade", trade)
 
         if not self._scalp_fired:
