@@ -518,7 +518,8 @@ class TradingBot:
                     f"best ${best_ask:.2f} — proceeding with IOC"
                 )
             except Exception as e:
-                log.warning(f"SCALP | Book depth check failed: {e} — proceeding anyway")
+                log.warning(f"SCALP | Book depth check failed: {e} — skipping")
+                return
 
             # Book check passed — lock the scalp slot for this window
             self.window.scalp_fired = True

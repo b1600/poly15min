@@ -281,7 +281,19 @@ def get_order_status(client, order_id) -> dict:
 def get_book(client, token_id):
     """Return the full order book (bids + asks) for a token, or None on error."""
     try:
-        return client.get_order_book(token_id)
+        book = client.get_order_book(token_id)
+        if isinstance(book, dict):
+            # API occasionally returns raw JSON dict instead of OrderBookSummary object
+            from types import SimpleNamespace
+            def _level(item):
+                if isinstance(item, dict):
+                    return SimpleNamespace(price=item.get("price", 0), size=item.get("size", 0))
+                return item
+            return SimpleNamespace(
+                asks=[_level(a) for a in book.get("asks", [])],
+                bids=[_level(b) for b in book.get("bids", [])],
+            )
+        return book
     except Exception as e:
         log.warning(f"Order book fetch failed: {e}")
         return None

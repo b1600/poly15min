@@ -232,7 +232,7 @@ class FadeExtremeStrategy:
             return None
 
         if cheap_price <= 0.01:
-            log.warning(
+            log.info(
                 f"FADE | {cheap_side} price ${cheap_price:.4f} ≤ $0.01 — "
                 f"market data corrupt, skipping"
             )
