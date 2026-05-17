@@ -277,7 +277,7 @@ class FadeExtremeStrategy:
             "shares": shares,
             "edge": round(1.0 / cheap_price * 0.10 - 1.0, 4),  # rough EV
             "kelly_pct": 0.0,
-            "estimated_prob": round(1.0 - self.extreme_threshold + 0.05, 4),
+            "estimated_prob": round(cheap_price, 4),
             "use_maker": True,
             "strategy": "fade",
         }
