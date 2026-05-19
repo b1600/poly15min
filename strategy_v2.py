@@ -250,6 +250,15 @@ class FadeExtremeStrategy:
             # Not a spike — steady drift, don't fade it
             return None
 
+        # Reject sustained directional drift: if BTC has been trending
+        # for ~5 minutes in the same direction as the extreme, the market
+        # is correctly priced — not an overshoot worth fading.
+        mom_5min = price_feed.get_momentum(lookback=300)
+        if cheap_side == "Up" and mom_5min < -0.0003:
+            return None
+        if cheap_side == "Down" and mom_5min > 0.0003:
+            return None
+
         # Small fixed-size bet (not Kelly — this is a speculative play)
         bet_amount = min(bankroll * self.max_bet_pct, 3.0)
         bet_amount = max(self.min_bet, bet_amount)
@@ -264,6 +273,7 @@ class FadeExtremeStrategy:
         log.info(
             f"FADE | {cheap_side} @ ${cheap_price:.2f} | "
             f"Spike ratio: {spike_ratio:.1f}x | "
+            f"Mom5m: {mom_5min*100:+.3f}% | "
             f"Shares: {shares} | Bet: ${bet_amount:.2f}"
         )
 
