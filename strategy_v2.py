@@ -5,7 +5,7 @@
 # A) Early Momentum (T-780 to T-480):
 #    Directional GTC maker bet when BTC has moved >0.3% from the
 #    window open in the first ~5 min of Phase 2. Uses volatility-
-#    normalised z-score to estimate P(win) and eighth-Kelly sizing.
+#    normalised z-score to estimate P(win) and quarter-Kelly sizing.
 #    Fires at most once per window.
 #
 # B) Fade Extreme Odds (T-780 to T-30):
@@ -80,7 +80,7 @@ class EarlyMomentumStrategy:
     def __init__(
         self,
         min_delta_pct: float = 0.30,      # need ≥0.30% BTC move
-        kelly_fraction: float = 0.125,     # eighth-Kelly
+        kelly_fraction: float = 0.25,      # quarter-Kelly
         min_edge: float = 0.05,            # need 5% net edge after fees
         min_bet: float = 2.50,             # GTC min: 5 shares × $0.50 = $2.50
         min_shares: int = 5,               # Polymarket CLOB GTC minimum
