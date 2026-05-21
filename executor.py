@@ -153,14 +153,24 @@ def redeem_positions(condition_id: str, outcome_index: int) -> str:
 _PUSD = "0xc011a7e12a19f7b1f670d46f03b03f3342e82dfb"
 _PUSD_ABI = [{"inputs":[{"name":"account","type":"address"}],"name":"balanceOf","outputs":[{"name":"","type":"uint256"}],"stateMutability":"view","type":"function"}]
 
+# Bridged USDC (USDC.e) — winnings from NegRisk redemptions land here before
+# the redeem.py Uniswap swap converts them to pUSD. Include in bankroll so that
+# a failed/delayed swap doesn't make the balance look lower than it really is.
+_USDC_E = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"
+
 def get_usdc_balance(client) -> float:
-    """Return the Polymarket trading balance in pUSD.
+    """Return the Polymarket trading balance: pUSD + any stranded USDC.e.
 
     Polymarket migrated collateral from USDC.e to pUSD. The CLOB API's
     get_balance_allowance consistently returns 0 for pUSD accounts, so we
     read the on-chain pUSD balance of the proxy wallet directly instead.
     The proxy's pUSD has unlimited approval for the new exchange contracts,
     so whatever is in the wallet is immediately available to trade.
+
+    USDC.e is included because winning redemptions land there before the
+    redeem.py Uniswap swap completes. Without it, a delayed/failed swap
+    makes the apparent balance look lower than actual portfolio value and
+    can trigger a false daily loss limit.
     """
     from web3 import Web3
     rpc = os.getenv(
@@ -169,8 +179,12 @@ def get_usdc_balance(client) -> float:
     )
     w3 = Web3(Web3.HTTPProvider(rpc))
     proxy = Web3.to_checksum_address(os.getenv("POLY_FUNDER_ADDRESS"))
-    pusd = w3.eth.contract(address=Web3.to_checksum_address(_PUSD), abi=_PUSD_ABI)
-    return pusd.functions.balanceOf(proxy).call() / 1_000_000
+    bal_abi = _PUSD_ABI
+    pusd = w3.eth.contract(address=Web3.to_checksum_address(_PUSD), abi=bal_abi)
+    usdc_e = w3.eth.contract(address=Web3.to_checksum_address(_USDC_E), abi=bal_abi)
+    pusd_bal = pusd.functions.balanceOf(proxy).call() / 1_000_000
+    usdc_e_bal = usdc_e.functions.balanceOf(proxy).call() / 1_000_000
+    return pusd_bal + usdc_e_bal
 
 def init_client():
     creds = ApiCreds(

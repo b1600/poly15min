@@ -252,6 +252,9 @@ class TradingBot:
             await asyncio.sleep(seconds_remaining + 1)
             return
 
+        # ── Sync bankroll (needed before loss limit check and before trading) ─
+        await self._refresh_bankroll()
+
         # ── Daily loss circuit breaker ─────────────────────
         if self._is_daily_loss_limit_hit():
             log.warning(
@@ -272,9 +275,6 @@ class TradingBot:
             log.warning("No window open price — skipping")
             await asyncio.sleep(5)
             return
-
-        # ── Sync bankroll from CLOB before placing any orders ─
-        await self._refresh_bankroll()
 
         # ── Initialize window state ────────────────────────
         self.window = WindowState(window_start)
