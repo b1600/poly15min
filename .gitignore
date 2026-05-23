@@ -14,3 +14,4 @@ build/
 *.log
 trade_log.json
 calibration_table.json
+calibration_log.json
