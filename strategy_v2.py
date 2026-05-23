@@ -8,12 +8,7 @@
 #    normalised z-score to estimate P(win) and half-Kelly sizing.
 #    Fires at most once per window.
 #
-# B) Fade Extreme Odds (T-780 to T-30):
-#    Buy the cheap side when market price is extreme (>0.85) AND
-#    the move looks like a spike (5s vol >> 60s vol). GTC maker order.
-#    Phase 4 (T-180 to T-30): primary strategy when Δ has run hard.
-#
-# C) Mid-Window Scalp (T-780 to T-30):
+# B) Mid-Window Scalp (T-780 to T-30):
 #    Single-shot GTC maker bet after checking order book depth.
 #    Phase 2 (T-780 to T-180): main directional entries.
 #    Phase 4 (T-180 to T-30): tighter thresholds, skips low-Δ entries.
@@ -23,7 +18,7 @@
 #   Phase 1 (T-900→T-780): fetch market, skip noise, confirm liquidity
 #   Phase 2 (T-780→T-180): main entry window — GTC maker-first
 #   Phase 3 (after fill):  manage positions, exit on inverted edge
-#   Phase 4 (T-180→T-30):  tighter thresholds, FADE focus
+#   Phase 4 (T-180→T-30):  tighter thresholds, closing-window rules
 #   No new entries after T-30
 #
 # WHY MM WAS REMOVED:
@@ -86,7 +81,7 @@ class EarlyMomentumStrategy:
         min_shares: int = 5,               # Polymarket CLOB GTC minimum
         max_bet_pct: float = 0.10,         # max 10% of bankroll
         entry_start: int = 780,            # start evaluating at T-780
-        entry_end: int = 480,              # stop at T-480 (scalp/fade take over)
+        entry_end: int = 480,              # stop at T-480 (scalp takes over)
     ):
         self.min_delta_pct = min_delta_pct
         self.kelly_fraction = kelly_fraction
@@ -175,126 +170,7 @@ class EarlyMomentumStrategy:
 
 
 # ═══════════════════════════════════════════════════════════
-# STRATEGY B: Fade Extreme Odds (opportunistic)
-# ═══════════════════════════════════════════════════════════
-#
-# Sometimes the market overshoots — a big BTC spike pushes
-# Up to 0.90+ but the spike is from a single large trade
-# that's likely to mean-revert. Betting the opposite side at
-# extreme odds has favorable risk/reward:
-#   Buy Down @ $0.08 → 12.5:1 payout if it reverts
-#   Need only ~10% reversion rate to break even
-#
-# In Phase 4 (T-180 to T-30), FADE becomes the primary strategy:
-# when Δ has run hard with <2 min left, overshoots tend to
-# mean-revert into resolution.
-#
-# Filter: only fade when the delta is driven by a spike (high
-# instantaneous volatility) rather than a steady drift.
-
-class FadeExtremeStrategy:
-    """
-    Buy the cheap side when market odds are extreme (>0.85)
-    and the move looks like a spike rather than a drift.
-    Active from T-780 to T-30 (primary strategy in Phase 4).
-    """
-
-    def __init__(
-        self,
-        extreme_threshold: float = 0.85,  # market price > this = extreme
-        max_bet_pct: float = 0.03,         # tiny bets — these are longshots
-        min_bet: float = 2.50,             # GTC min: 5 shares × $0.50 = $2.50
-        min_shares: int = 5,               # Polymarket CLOB GTC minimum
-        spike_vol_ratio: float = 3.0,      # current vol must be 3x avg
-    ):
-        self.extreme_threshold = extreme_threshold
-        self.max_bet_pct = max_bet_pct
-        self.min_bet = min_bet
-        self.min_shares = min_shares
-        self.spike_vol_ratio = spike_vol_ratio
-
-    def evaluate(self, market, bankroll, price_feed, seconds_remaining):
-        """Bet against spikes when odds are extreme. Active T-780 to T-30."""
-        if seconds_remaining < 30 or seconds_remaining > 780:
-            return None
-
-        up_price = market["Up"]["price"]
-        down_price = market["Down"]["price"]
-
-        # Detect extreme
-        if up_price > self.extreme_threshold:
-            cheap_side = "Down"
-            cheap_price = down_price
-        elif down_price > self.extreme_threshold:
-            cheap_side = "Up"
-            cheap_price = up_price
-        else:
-            return None
-
-        if cheap_price <= 0.01:
-            log.info(
-                f"FADE | {cheap_side} price ${cheap_price:.4f} ≤ $0.01 — "
-                f"market data corrupt, skipping"
-            )
-            return None
-
-        # Check if this is a spike (high recent vol vs avg)
-        vol_5s = price_feed.get_volatility(lookback=5)
-        vol_60s = price_feed.get_volatility(lookback=60)
-
-        if vol_60s <= 0:
-            return None
-
-        spike_ratio = vol_5s / vol_60s
-        if spike_ratio < self.spike_vol_ratio:
-            # Not a spike — steady drift, don't fade it
-            return None
-
-        # Reject sustained directional drift: if BTC has been trending
-        # for ~5 minutes in the same direction as the extreme, the market
-        # is correctly priced — not an overshoot worth fading.
-        mom_5min = price_feed.get_momentum(lookback=300)
-        if cheap_side == "Up" and mom_5min < -0.0003:
-            return None
-        if cheap_side == "Down" and mom_5min > 0.0003:
-            return None
-
-        # Small fixed-size bet (not Kelly — this is a speculative play)
-        bet_amount = min(bankroll * self.max_bet_pct, 3.0)
-        bet_amount = max(self.min_bet, bet_amount)
-
-        if bet_amount > bankroll * 0.10:
-            return None  # don't risk too much on longshots
-
-        # Enforce 5-share minimum for GTC orders
-        shares = max(self.min_shares, round(bet_amount / cheap_price, 1))
-        bet_amount = round(shares * cheap_price, 2)
-
-        log.info(
-            f"FADE | {cheap_side} @ ${cheap_price:.2f} | "
-            f"Spike ratio: {spike_ratio:.1f}x | "
-            f"Mom5m: {mom_5min*100:+.3f}% | "
-            f"Shares: {shares} | Bet: ${bet_amount:.2f}"
-        )
-
-        return {
-            "side": cheap_side,
-            "token_id": market[cheap_side]["token_id"],
-            "outcome_index": market[cheap_side]["outcome_index"],
-            "price": cheap_price,
-            "maker_price": cheap_price,    # GTC limit bid at current ask
-            "bet_amount": bet_amount,
-            "shares": shares,
-            "edge": round(1.0 / cheap_price * 0.10 - 1.0, 4),  # rough EV
-            "kelly_pct": 0.0,
-            "estimated_prob": round(cheap_price, 4),
-            "use_maker": True,
-            "strategy": "fade",
-        }
-
-
-# ═══════════════════════════════════════════════════════════
-# STRATEGY C: Mid-Window Scalp
+# STRATEGY B: Mid-Window Scalp
 # ═══════════════════════════════════════════════════════════
 #
 # Directional GTC maker bet when delta is significant.
@@ -423,13 +299,13 @@ class LateScalpStrategy:
 
 class CombinedStrategy:
     """
-    Orchestrates all three strategies across the 15-min window lifecycle.
+    Orchestrates both strategies across the 15-min window lifecycle.
 
     Phase structure (per 20260511_strategy.md):
       Phase 1 (T-900→T-780): skip — no trades, liquidity confirmation window
-      Phase 2 (T-780→T-180): main entry window (MOMENTUM → FADE → SCALP)
+      Phase 2 (T-780→T-180): main entry window (MOMENTUM → SCALP)
       Phase 3 (after any fill): position management via evaluate_exits()
-      Phase 4 (T-180→T-30):   tighter thresholds, FADE is primary strategy
+      Phase 4 (T-180→T-30):   tighter thresholds, closing-window rules
       No new entries after T-30
 
     The bot loop calls evaluate_phase() on every 5s tick and
@@ -439,7 +315,6 @@ class CombinedStrategy:
 
     def __init__(self, dry_run: bool = True):  # dry_run kept for API compatibility
         self.momentum = EarlyMomentumStrategy()
-        self.fade = FadeExtremeStrategy()
         self.scalp = LateScalpStrategy()
         self._momentum_fired = False
         self._scalp_fired = False
@@ -530,7 +405,6 @@ class CombinedStrategy:
         """
         Called on every 5s tick. Returns:
           ("momentum", trade)  — Phase 2 early directional bet
-          ("fade", trade)      — opportunistic fade (Phase 2 or 4)
           ("scalp", trade)     — directional GTC bet (Phase 2 or 4)
           ("skip", None)       — do nothing this tick
         """
@@ -542,7 +416,7 @@ class CombinedStrategy:
         if seconds_remaining <= _PHASE4_END:
             return ("skip", None)
 
-        # Phase 4 (T-180 → T-30): tighter thresholds, FADE focus
+        # Phase 4 (T-180 → T-30): tighter thresholds
         if seconds_remaining <= _PHASE2_END:
             delta = price_feed.get_window_delta()
             delta_pct = abs(delta) * 100
@@ -551,12 +425,7 @@ class CombinedStrategy:
             if delta_pct < 0.10 and seconds_remaining < 90:
                 return ("skip", None)
 
-            # FADE is primary in Phase 4 — overshoots mean-revert into resolution
-            trade = self.fade.evaluate(market, bankroll, price_feed, seconds_remaining)
-            if trade and trade["edge"] >= 0.07:
-                return ("fade", trade)
-
-            # SCALP still allowed in Phase 4 on significant delta with tight edge
+            # SCALP allowed in Phase 4 on significant delta with tight edge
             if not self._scalp_fired and delta_pct >= 0.25:
                 trade = self.scalp.evaluate(market, bankroll, price_feed, seconds_remaining)
                 if trade and trade["edge"] >= 0.07:
@@ -566,16 +435,12 @@ class CombinedStrategy:
             return ("skip", None)
 
         # Phase 2 (T-780 → T-180): main entry window
-        # Priority: MOMENTUM (early) → FADE (opportunistic) → SCALP
+        # Priority: MOMENTUM (early) → SCALP
         if not self._momentum_fired:
             trade = self.momentum.evaluate(market, bankroll, price_feed, seconds_remaining)
             if trade:
                 self._momentum_fired = True
                 return ("momentum", trade)
-
-        trade = self.fade.evaluate(market, bankroll, price_feed, seconds_remaining)
-        if trade and trade["edge"] >= 0.07:
-            return ("fade", trade)
 
         if not self._scalp_fired:
             trade = self.scalp.evaluate(market, bankroll, price_feed, seconds_remaining)

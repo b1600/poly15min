@@ -1,9 +1,8 @@
 # bot.py — v2 multi-phase trading loop
 #
-# Three strategies fire at different phases:
-#   T-360 → T-270:  Early momentum (directional, taker FAK)
-#   T-540 → T-270:  Fade extreme spikes (opportunistic, taker FAK)
-#   T-810 → T-30:   Late-window scalp — single-shot taker execution:
+# Two strategies fire at different phases:
+#   T-780 → T-480:  Early momentum (directional, GTC maker)
+#   T-780 → T-30:   Late-window scalp — single-shot taker execution:
 #                    1. Check order book depth — skip if no asks (illiquid)
 #                    2. Place one IOC order, capped at max_price
 #                       (prob_win - min_edge) to keep positive EV
@@ -146,7 +145,6 @@ class WindowState:
         # Flags
         self.momentum_fired = False
         self.scalp_fired = False
-        self.fade_fired = False
 
     @property
     def trade_count(self) -> int:
@@ -296,7 +294,7 @@ class TradingBot:
         await self._cleanup_window()
 
         # ── Spawn background resolution — don't block next window entry ──
-        # MOMENTUM/FADE GTC orders survive cleanup and get extra lifetime
+        # MOMENTUM GTC orders survive cleanup and get extra lifetime
         # equal to RESOLUTION_WAIT before background task cancels them.
         asyncio.create_task(self._resolve_window_background(self.window))
 
@@ -369,16 +367,6 @@ class TradingBot:
                 await self._execute_directional(result, "MOMENTUM")
                 self.window.momentum_fired = True
 
-            elif phase == "fade":
-                if not self.window.fade_fired:
-                    await self._execute_directional(result, "FADE")
-                    self.window.fade_fired = True
-                else:
-                    log.info(
-                        f"FADE | Duplicate suppressed (already placed this window) | "
-                        f"side={result['side']} edge={result['edge']:.3f}"
-                    )
-
             elif phase == "scalp" and not self.window.scalp_fired:
                 if time.time() < self._scalp_cooldown_until:
                     pass  # cooldown active — skip this tick
@@ -405,10 +393,10 @@ class TradingBot:
             return False
         return True
 
-    # ── Execution: Directional (Momentum / Fade) ──────────────────────
+    # ── Execution: Directional (Momentum) ─────────────────────────────
 
     async def _execute_directional(self, trade: dict, label: str):
-        """GTC maker order for MOMENTUM and FADE strategies.
+        """GTC maker order for MOMENTUM strategy.
         Posts a resting limit bid at maker_price; cancelled by cleanup sweep if unfilled.
         """
         if not self._apply_kelly_throttle(trade):
@@ -647,12 +635,12 @@ class TradingBot:
     async def _cleanup_window(self):
         """Cancel resting GTC orders at window close.
 
-        MOMENTUM and FADE GTC orders are intentionally left open — they get
+        MOMENTUM GTC orders are intentionally left open — they get
         extra fill time equal to RESOLUTION_WAIT before the background task
         cancels them. All other orders (scalp_gtc, etc.) are cancelled now.
         """
         if not self.dry_run and self.client:
-            # Determine if any MOMENTUM/FADE orders need to survive
+            # Determine if any MOMENTUM orders need to survive
             surviving = [
                 t for t in self.window.trades
                 if t.get("status") == "pending"
@@ -661,7 +649,7 @@ class TradingBot:
             ]
 
             if surviving:
-                # Cancel non-MOMENTUM/FADE orders individually; leave survivors open
+                # Cancel non-MOMENTUM orders individually; leave survivors open
                 for trade in self.window.trades:
                     if trade.get("status") != "pending" or not trade.get("order_id"):
                         continue
@@ -691,7 +679,7 @@ class TradingBot:
                 except Exception as e:
                     log.error(f"cancel_all safety sweep failed: {e}")
 
-                # Mark non-MOMENTUM/FADE GTC orders as cancelled
+                # Mark non-MOMENTUM GTC orders as cancelled
                 for trade in self.window.trades:
                     if trade.get("status") != "pending" or not trade.get("order_id"):
                         continue
@@ -724,7 +712,7 @@ class TradingBot:
     async def _resolve_window_background(self, window: "WindowState"):
         """
         Background task: waits RESOLUTION_WAIT seconds, then cancels any
-        still-open MOMENTUM/FADE GTC orders, resolves P&L, and refreshes bankroll.
+        still-open MOMENTUM GTC orders, resolves P&L, and refreshes bankroll.
 
         Runs concurrently with the next window's trading so the main loop
         re-enters at T=0 instead of T-360.
@@ -735,7 +723,7 @@ class TradingBot:
 
         window.btc_close_price = self.price_feed.current_price
 
-        # Check and cancel any MOMENTUM/FADE orders that survived cleanup
+        # Check and cancel any MOMENTUM orders that survived cleanup
         if not self.dry_run and self.client:
             for trade in window.trades:
                 if trade.get("status") != "pending" or not trade.get("order_id"):
