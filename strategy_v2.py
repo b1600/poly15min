@@ -31,7 +31,9 @@
 # ─────────────────────────────────────────────────────────
 
 import logging
+from collections import deque
 from dataclasses import dataclass
+from typing import Optional
 import time as _time
 
 log = logging.getLogger("strategy_v2")
@@ -42,6 +44,14 @@ MAX_BUY_PRICE = 0.85  # strategy doc: "don't buy above e.g. 0.85"
 _PHASE1_END = 780   # T-13:00 — end of setup-only phase
 _PHASE2_END = 180   # T-3:00  — switch to closing-window rules
 _PHASE4_END = 30    # T-0:30  — no new entries after this
+
+# Velocity trigger parameters (Path B — slow-burn directional entries)
+_VEL_WINDOW_S = 180       # rolling lookback for velocity calc (seconds)
+_VEL_THRESHOLD = 0.0012   # |delta_now − delta_past| ≥ 0.12% in fraction units
+_VEL_MONOTONE_MIN = 3     # of the last 4 snapshots, ≥3 consecutive diffs must agree
+_VEL_CUTOFF_S = 240       # don't fire with fewer than 240s remaining
+_VEL_RECORD_INTERVAL = 55 # snapshot cadence: one entry per ~55s of Phase 2
+_VEL_MAX_BUY_PRICE = 0.80 # tighter price cap for velocity entries (less runway)
 
 
 @dataclass
@@ -294,6 +304,56 @@ class LateScalpStrategy:
 
 
 # ═══════════════════════════════════════════════════════════
+# Velocity signal (Path B helper)
+# ═══════════════════════════════════════════════════════════
+
+def _velocity_signal(
+    delta_history: deque,
+    seconds_remaining: int,
+    delta_now: float,
+) -> Optional[str]:
+    """
+    Return "Up", "Down", or None based on rolling delta velocity.
+
+    Fires when all three hold:
+      1. |delta_now − delta ~180s ago| >= _VEL_THRESHOLD (0.12% in fraction)
+      2. >= _VEL_MONOTONE_MIN of the last 4 snapshot diffs agree in direction
+      3. seconds_remaining >= _VEL_CUTOFF_S (at least 240s of runway)
+    """
+    if seconds_remaining < _VEL_CUTOFF_S:
+        return None
+    if len(delta_history) < 4:
+        return None
+
+    # Find the snapshot closest to 180s earlier in the window
+    target_secs = seconds_remaining + _VEL_WINDOW_S
+    past = min(delta_history, key=lambda x: abs(x[0] - target_secs))
+    velocity = delta_now - past[1]
+
+    if abs(velocity) < _VEL_THRESHOLD:
+        return None
+
+    # Require >=3 of the last 3 consecutive diffs to agree with velocity direction.
+    # Strict inequality (d * sign > 0) excludes flat scans from either side.
+    going_down = velocity < 0
+    direction_sign = -1 if going_down else 1
+    last4 = list(delta_history)[-4:]
+    diffs = [last4[i + 1][1] - last4[i][1] for i in range(3)]
+    agree = sum(1 for d in diffs if d * direction_sign > 0)
+    if agree < _VEL_MONOTONE_MIN:
+        log.info(f"VEL | rejected non-monotone — agree={agree}/3 v={velocity:+.6f}")
+        return None
+
+    direction = "Down" if going_down else "Up"
+    log.info(
+        f"VEL | trigger {direction} | v={velocity:+.6f} over {_VEL_WINDOW_S}s "
+        f"| delta_now={delta_now:+.6f} delta_past={past[1]:+.6f} "
+        f"| T-{seconds_remaining}s"
+    )
+    return direction
+
+
+# ═══════════════════════════════════════════════════════════
 # Combined Orchestrator
 # ═══════════════════════════════════════════════════════════
 
@@ -319,12 +379,16 @@ class CombinedStrategy:
         self._momentum_fired = False
         self._scalp_fired = False
         self.open_positions: list[OpenPosition] = []
+        self._delta_history: deque = deque(maxlen=12)  # ~11 min at 55s cadence
+        self._last_vel_record_s: int = -1
 
     def on_new_window(self):
         """Reset per-window state at the start of each 15-min window."""
         self._momentum_fired = False
         self._scalp_fired = False
         self.open_positions = []
+        self._delta_history = deque(maxlen=12)
+        self._last_vel_record_s = -1
 
     def is_liquid(self, market) -> bool:
         """
@@ -354,6 +418,69 @@ class CombinedStrategy:
             entry_time=_time.time(),
             strategy=trade["strategy"],
         ))
+
+    def _evaluate_velocity_entry(
+        self,
+        market,
+        bankroll: float,
+        price_feed,
+        seconds_remaining: int,
+        direction: str,
+    ) -> Optional[dict]:
+        """
+        Build a SCALP trade for a velocity-triggered entry.
+        Same sizing as LateScalpStrategy but skips the min_delta_pct gate.
+        Uses a tighter _VEL_MAX_BUY_PRICE cap since late entries have less
+        time to recover from an adverse fill.
+        """
+        delta = price_feed.get_window_delta()
+        vol = price_feed.get_volatility(lookback=30)
+        prob_up = _estimate_prob_from_delta(delta, seconds_remaining, vol)
+        market_price = market[direction]["price"]
+        prob_win = prob_up if direction == "Up" else 1.0 - prob_up
+
+        if market_price > _VEL_MAX_BUY_PRICE:
+            return None
+
+        edge = prob_win - market_price
+        taker_fee = 4 * market_price * (1 - market_price) * 0.0156
+        net_edge = edge - taker_fee
+        if net_edge < self.scalp.min_edge:
+            return None
+
+        b = (1.0 - market_price) / market_price
+        f_star = (b * prob_win - (1.0 - prob_win)) / b
+        if f_star <= 0:
+            return None
+
+        kelly_bet = f_star * self.scalp.kelly_fraction
+        bet_amount = min(kelly_bet * bankroll, bankroll * self.scalp.max_bet_pct)
+        bet_amount = max(self.scalp.min_bet, bet_amount)
+        shares = max(self.scalp.min_shares, round(bet_amount / market_price, 1))
+        bet_amount = round(shares * market_price, 2)
+
+        price_buffer = 0.04 if edge >= self.scalp.high_edge_threshold else 0.03
+        max_price = round(min(prob_win - self.scalp.min_edge + price_buffer, 0.95), 2)
+
+        log.info(
+            f"VEL-SCALP | {direction} @ ${market_price:.2f} (max ${max_price:.2f}) | "
+            f"Delta: {delta*100:+.3f}% | P(win): {prob_win:.2f} | Edge: {net_edge:.3f} | "
+            f"Shares: {shares} | Bet: ${bet_amount:.2f} | T-{seconds_remaining}s"
+        )
+        return {
+            "side": direction,
+            "token_id": market[direction]["token_id"],
+            "outcome_index": market[direction]["outcome_index"],
+            "price": market_price,
+            "max_price": max_price,
+            "bet_amount": bet_amount,
+            "shares": shares,
+            "edge": round(net_edge, 4),
+            "kelly_pct": round(kelly_bet, 4),
+            "estimated_prob": round(prob_win, 4),
+            "use_maker": True,
+            "strategy": "velocity",
+        }
 
     def evaluate_exits(self, market, price_feed, seconds_remaining) -> list[dict]:
         """
@@ -435,7 +562,16 @@ class CombinedStrategy:
             return ("skip", None)
 
         # Phase 2 (T-780 → T-180): main entry window
-        # Priority: MOMENTUM (early) → SCALP
+        # Snapshot delta at ~55s intervals for velocity tracking (Path B)
+        delta = price_feed.get_window_delta()
+        if (
+            self._last_vel_record_s < 0
+            or (self._last_vel_record_s - seconds_remaining) >= _VEL_RECORD_INTERVAL
+        ):
+            self._delta_history.append((seconds_remaining, delta))
+            self._last_vel_record_s = seconds_remaining
+
+        # Priority: MOMENTUM (early) → SCALP absolute-delta → SCALP velocity
         if not self._momentum_fired:
             trade = self.momentum.evaluate(market, bankroll, price_feed, seconds_remaining)
             if trade:
@@ -447,6 +583,15 @@ class CombinedStrategy:
             if trade:
                 self._scalp_fired = True
                 return ("scalp", trade)
+
+            vel_dir = _velocity_signal(self._delta_history, seconds_remaining, delta)
+            if vel_dir is not None:
+                trade = self._evaluate_velocity_entry(
+                    market, bankroll, price_feed, seconds_remaining, vel_dir
+                )
+                if trade:
+                    self._scalp_fired = True
+                    return ("scalp", trade)
 
         return ("skip", None)
 

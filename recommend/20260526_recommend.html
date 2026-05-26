@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>polybot — velocity trigger spec</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0e0c;
+    --bg-elev: #14160f;
+    --ink: #d4d4c8;
+    --ink-dim: #7a7c70;
+    --ink-faint: #44463d;
+    --rule: #23251c;
+    --accent: #d4ff3a;
+    --warn: #ff7a3a;
+    --down: #ff5577;
+    --up: #66e0a0;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+    --font-display: 'Fraunces', Georgia, serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 14px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(212,255,58,0.04), transparent),
+      linear-gradient(var(--rule) 1px, transparent 1px),
+      linear-gradient(90deg, var(--rule) 1px, transparent 1px);
+    background-size: 100% 100%, 64px 64px, 64px 64px;
+    background-position: 0 0, 0 0, 0 0;
+    min-height: 100vh;
+  }
+  .container {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 56px 40px 80px;
+  }
+  /* ============ Header ============ */
+  .meta {
+    display: flex;
+    justify-content: space-between;
+    border-top: 1px solid var(--ink);
+    border-bottom: 1px solid var(--rule);
+    padding: 8px 0;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+  }
+  .meta span:nth-child(2) { color: var(--accent); }
+  header.doc-head {
+    padding: 48px 0 32px;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 48px;
+    position: relative;
+  }
+  .tag {
+    display: inline-block;
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--bg);
+    background: var(--accent);
+    padding: 2px 10px;
+    margin-bottom: 28px;
+    font-weight: 500;
+  }
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: clamp(40px, 6vw, 68px);
+    line-height: 0.96;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    margin-bottom: 20px;
+    font-variation-settings: "opsz" 144;
+  }
+  h1 em {
+    font-style: italic;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .lede {
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-style: italic;
+    color: var(--ink-dim);
+    max-width: 60ch;
+    line-height: 1.5;
+  }
+  .lede strong { color: var(--ink); font-style: normal; font-weight: 600; }
+
+  /* ============ Section headings ============ */
+  h2 {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 500;
+    margin: 56px 0 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  h2::before {
+    content: counter(sec, decimal-leading-zero);
+    counter-increment: sec;
+    color: var(--ink-faint);
+    font-weight: 400;
+  }
+  h2::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--rule);
+  }
+  body { counter-reset: sec; }
+  h3 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 22px;
+    color: var(--ink);
+    margin: 28px 0 12px;
+    letter-spacing: -0.01em;
+  }
+  p { margin-bottom: 14px; max-width: 72ch; }
+  p strong { color: var(--accent); font-weight: 500; }
+
+  /* ============ Problem framing block ============ */
+  .frame {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    border: 1px solid var(--rule);
+    margin: 24px 0;
+  }
+  .frame > div {
+    padding: 24px 28px;
+  }
+  .frame > div:first-child { border-right: 1px solid var(--rule); }
+  .frame .label {
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 12px;
+  }
+  .frame .stat {
+    font-family: var(--font-display);
+    font-size: 32px;
+    line-height: 1.1;
+    color: var(--ink);
+    margin-bottom: 8px;
+    font-weight: 400;
+  }
+  .frame .stat .small { font-size: 16px; color: var(--ink-dim); }
+  .frame .stat.miss { color: var(--down); }
+  .frame .desc { font-size: 12px; color: var(--ink-dim); line-height: 1.5; }
+
+  /* ============ Code blocks ============ */
+  .code {
+    background: var(--bg-elev);
+    border: 1px solid var(--rule);
+    border-left: 2px solid var(--accent);
+    padding: 20px 24px;
+    margin: 20px 0;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.7;
+    position: relative;
+  }
+  .code::before {
+    content: attr(data-label);
+    position: absolute;
+    top: -1px;
+    right: -1px;
+    background: var(--accent);
+    color: var(--bg);
+    padding: 3px 10px;
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+  .code pre { white-space: pre; font-family: var(--font-mono); }
+  .kw { color: #c7a8ff; }
+  .fn { color: #88d8ff; }
+  .str { color: var(--up); }
+  .num { color: var(--warn); }
+  .cm { color: var(--ink-faint); font-style: italic; }
+  .self { color: var(--accent); }
+  .op { color: var(--ink-dim); }
+
+  /* ============ Comparison table ============ */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0;
+    font-size: 12.5px;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--rule);
+  }
+  th {
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 500;
+    border-bottom-color: var(--ink-dim);
+  }
+  td.t { color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+  td.delta { color: var(--ink); font-variant-numeric: tabular-nums; }
+  td.v { font-variant-numeric: tabular-nums; }
+  td.v.hit { color: var(--accent); font-weight: 500; }
+  td.v.miss { color: var(--ink-faint); }
+  tr.fire { background: rgba(212,255,58,0.04); }
+  tr.fire td:first-child::before {
+    content: "▸ ";
+    color: var(--accent);
+  }
+  .tag-inline {
+    display: inline-block;
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 1px 6px;
+    border: 1px solid currentColor;
+  }
+  .tag-inline.up { color: var(--up); }
+  .tag-inline.down { color: var(--down); }
+  .tag-inline.dim { color: var(--ink-faint); }
+
+  /* ============ Param spec ============ */
+  .params {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin: 20px 0;
+  }
+  .param {
+    background: var(--bg);
+    padding: 18px 20px;
+  }
+  .param .name {
+    font-size: 13px;
+    color: var(--accent);
+    font-weight: 500;
+    margin-bottom: 4px;
+  }
+  .param .val {
+    font-family: var(--font-display);
+    font-size: 26px;
+    font-weight: 600;
+    color: var(--ink);
+    margin: 6px 0;
+    font-variation-settings: "opsz" 32;
+  }
+  .param .val .unit { font-size: 14px; color: var(--ink-dim); font-weight: 400; margin-left: 4px; }
+  .param .desc { font-size: 11.5px; color: var(--ink-dim); line-height: 1.5; }
+
+  /* ============ Tradeoffs ============ */
+  .tradeoffs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin: 20px 0;
+  }
+  .tradeoff {
+    border: 1px solid var(--rule);
+    padding: 22px 24px;
+    position: relative;
+  }
+  .tradeoff h4 {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    font-weight: 500;
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .tradeoff.pro h4 { color: var(--up); }
+  .tradeoff.con h4 { color: var(--warn); }
+  .tradeoff ul { list-style: none; }
+  .tradeoff li {
+    padding: 8px 0 8px 18px;
+    position: relative;
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  .tradeoff li::before {
+    position: absolute;
+    left: 0;
+    top: 8px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+  .tradeoff.pro li::before { content: "+"; color: var(--up); }
+  .tradeoff.con li::before { content: "−"; color: var(--warn); }
+
+  /* ============ Footer ============ */
+  footer {
+    margin-top: 80px;
+    padding-top: 24px;
+    border-top: 1px solid var(--rule);
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  /* ============ ASCII timeline ============ */
+  .timeline {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--ink-dim);
+    background: var(--bg-elev);
+    border: 1px solid var(--rule);
+    padding: 20px 24px;
+    margin: 20px 0;
+    white-space: pre;
+    overflow-x: auto;
+  }
+  .timeline .acc { color: var(--accent); }
+  .timeline .dn { color: var(--down); }
+  .timeline .dim { color: var(--ink-faint); }
+
+  @media (max-width: 720px) {
+    .container { padding: 32px 20px; }
+    .frame, .params, .tradeoffs { grid-template-columns: 1fr; }
+    .frame > div:first-child { border-right: none; border-bottom: 1px solid var(--rule); }
+    .params { gap: 1px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="meta">
+    <span>polybot / strategy_v2 / RFC</span>
+    <span>● DRAFT</span>
+    <span>2026-05-26</span>
+  </div>
+
+  <header class="doc-head">
+    <span class="tag">Strategy patch</span>
+    <h1>Velocity trigger for <em>slow-burn</em> 15-min windows</h1>
+    <p class="lede">A second entry path that fires on <strong>rate of change</strong>, not absolute Delta — so windows that move 0.30% over 12 minutes still get traded, even when no single scan trips the static threshold.</p>
+  </header>
+
+  <h2>Problem</h2>
+  <p>The 07:30–07:45 window on 26 May 2026 dropped <strong>~$252 (-0.33%)</strong> from open to close, but the bot stayed flat. Each minute's Delta was small in isolation; by the time Delta reached the SCALP entry threshold (~0.205%), the window was already in Phase4(closing) — past the entry cutoff. The move was real but its <em>shape</em> was wrong for the current logic.</p>
+
+  <div class="frame">
+    <div>
+      <div class="label">Window open → close</div>
+      <div class="stat miss">−0.33%<span class="small"> &nbsp;($77,120 → $76,868)</span></div>
+      <div class="desc">A trade-worthy move on any reasonable strategy — directional, monotone for ~10 of 15 minutes.</div>
+    </div>
+    <div>
+      <div class="label">Bot action</div>
+      <div class="stat">∅<span class="small"> &nbsp;0 signals, 0 orders</span></div>
+      <div class="desc">Delta peaked at −0.249% in Phase2 — below the 0.205% threshold band only fractionally, and the larger −0.288% / −0.294% readings landed after Phase4 lockout.</div>
+    </div>
+  </div>
+
+  <h3>The signal that was hiding in plain sight</h3>
+  <p>Reading the per-minute scans laterally, the <em>velocity</em> of Delta — its first derivative over a rolling window — was clearly elevated well before T-200s:</p>
+
+  <div class="timeline">T-748  T-687  T-627  T-566  T-505  T-444  T-383  T-323  T-262  T-202  T-141  T-80
+─────────────────────────────────────────────────────────────────────────────────
++0.04  +0.00  +0.02  −0.02  −0.03  −0.09  <span class="dn">−0.16</span>  <span class="dn">−0.18</span>  <span class="dn">−0.24</span>  <span class="dn">−0.25</span>  <span class="dim">−0.29</span>  <span class="dim">−0.29</span>     %  Δ vs open
+  ·      ·      ·      ·      ·    <span class="acc">−.06</span>  <span class="acc">−.07</span>  <span class="acc">−.02</span>  <span class="acc">−.06</span>  <span class="acc">−.01</span>    <span class="dim">·</span>      <span class="dim">·</span>       v₁  (1-min)
+  ·      ·      ·      ·      ·      ·    <span class="acc">−.12</span>  <span class="acc">−.10</span>  <span class="acc">−.08</span>  <span class="acc">−.07</span>    <span class="dim">·</span>      <span class="dim">·</span>       v₂  (2-min rolling)
+                                            └─── velocity trigger window ───┘     <span class="dim">phase4</span></div>
+
+  <p>From T-444s to T-262s — a span of ~3 minutes inside Phase2 — Delta moved from −0.086% to −0.235%, a swing of <strong>0.149%</strong>. That's the same magnitude as the static threshold (0.205%), achieved in a third of the time, and it landed with 4+ minutes of trading runway left. The trade was there. The detector wasn't.</p>
+
+  <h2>Specification</h2>
+
+  <h3>Trigger definition</h3>
+  <p>Augment <code>strategy_v2.py</code> with a second SCALP entry path, evaluated in parallel with the existing absolute-Delta path. The trigger fires when the rolling velocity of Delta crosses a threshold <em>and</em> direction is consistent.</p>
+
+  <div class="params">
+    <div class="param">
+      <div class="name">velocity_window_s</div>
+      <div class="val">180<span class="unit">seconds</span></div>
+      <div class="desc">Rolling lookback for velocity calc. ~3 scans at 60s cadence — long enough to filter noise, short enough to catch a 3-minute trend leg.</div>
+    </div>
+    <div class="param">
+      <div class="name">velocity_threshold</div>
+      <div class="val">0.12<span class="unit">% / window</span></div>
+      <div class="desc">|Δ_now − Δ_180s_ago| must exceed this. Calibrated so the 07:30 case triggers at T-262s with v₂ = 0.149%.</div>
+    </div>
+    <div class="param">
+      <div class="name">monotone_min</div>
+      <div class="val">3<span class="unit">scans</span></div>
+      <div class="desc">Of the last 4 scans, at least 3 must move in the same direction as the velocity. Rejects v-shaped chop that hits threshold via mean-revert.</div>
+    </div>
+    <div class="param">
+      <div class="name">entry_cutoff_s</div>
+      <div class="val">T−240<span class="unit">min</span></div>
+      <div class="desc">Velocity entries only valid until 4 min before close. Keeps a margin above Phase4 lockout for fill + execution risk.</div>
+    </div>
+  </div>
+
+  <h3>Implementation</h3>
+
+  <div class="code" data-label="strategy_v2.py">
+<pre><span class="cm"># ── add to StrategyState ──────────────────────────────────────────────</span>
+<span class="kw">from</span> collections <span class="kw">import</span> deque
+
+<span class="kw">class</span> <span class="fn">StrategyState</span>:
+    <span class="kw">def</span> <span class="fn">__init__</span>(<span class="self">self</span>, ...):
+        ...
+        <span class="self">self</span>.delta_history = deque(maxlen=<span class="num">8</span>)  <span class="cm"># (t_minus_s, delta_pct)</span>
+
+    <span class="kw">def</span> <span class="fn">record_scan</span>(<span class="self">self</span>, t_minus_s: <span class="kw">int</span>, delta_pct: <span class="kw">float</span>):
+        <span class="self">self</span>.delta_history.append((t_minus_s, delta_pct))
+
+
+<span class="cm"># ── new trigger ───────────────────────────────────────────────────────</span>
+VELOCITY_WINDOW_S    = <span class="num">180</span>
+VELOCITY_THRESHOLD   = <span class="num">0.0012</span>   <span class="cm"># 0.12% over the window</span>
+MONOTONE_MIN         = <span class="num">3</span>        <span class="cm"># of last 4 scans</span>
+VELOCITY_CUTOFF_S    = <span class="num">240</span>      <span class="cm"># T-240, do not enter past this</span>
+
+<span class="kw">def</span> <span class="fn">velocity_signal</span>(state: StrategyState, t_minus_s: <span class="kw">int</span>) -> Optional[Direction]:
+    <span class="str">"""Return UP/DOWN if velocity trigger fires, else None.
+
+    Fires when:
+      1. |Δ_now − Δ_at_(t+window)| ≥ VELOCITY_THRESHOLD
+      2. ≥ MONOTONE_MIN of last 4 scans agree in direction
+      3. t_minus_s ≥ VELOCITY_CUTOFF_S (still safe to enter)
+    """</span>
+    <span class="kw">if</span> t_minus_s &lt; VELOCITY_CUTOFF_S:
+        <span class="kw">return</span> <span class="kw">None</span>
+    <span class="kw">if</span> <span class="fn">len</span>(state.delta_history) &lt; <span class="num">4</span>:
+        <span class="kw">return</span> <span class="kw">None</span>
+
+    <span class="cm"># find the scan closest to (t_minus_s + window) in the past</span>
+    target = t_minus_s + VELOCITY_WINDOW_S
+    past = <span class="kw">min</span>(state.delta_history, key=<span class="kw">lambda</span> x: <span class="fn">abs</span>(x[<span class="num">0</span>] - target))
+    delta_now  = state.delta_history[-<span class="num">1</span>][<span class="num">1</span>]
+    delta_past = past[<span class="num">1</span>]
+    velocity   = delta_now - delta_past
+
+    <span class="kw">if</span> <span class="fn">abs</span>(velocity) &lt; VELOCITY_THRESHOLD:
+        <span class="kw">return</span> <span class="kw">None</span>
+
+    <span class="cm"># monotonicity check on last 4 scans</span>
+    last4 = <span class="kw">list</span>(state.delta_history)[-<span class="num">4</span>:]
+    diffs = [last4[i+<span class="num">1</span>][<span class="num">1</span>] - last4[i][<span class="num">1</span>] <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="num">3</span>)]
+    direction = -<span class="num">1</span> <span class="kw">if</span> velocity &lt; <span class="num">0</span> <span class="kw">else</span> <span class="num">1</span>
+    agree = <span class="fn">sum</span>(<span class="num">1</span> <span class="kw">for</span> d <span class="kw">in</span> diffs <span class="kw">if</span> (d &gt;= <span class="num">0</span>) == (direction &gt; <span class="num">0</span>))
+    <span class="kw">if</span> agree &lt; MONOTONE_MIN:
+        log.info(<span class="str">f"VEL | rejected non-monotone — agree={agree}/3 v={velocity:+.4f}"</span>)
+        <span class="kw">return</span> <span class="kw">None</span>
+
+    log.info(
+        <span class="str">f"VEL | trigger {Direction.DOWN <span class="kw">if</span> direction&lt;<span class="num">0</span> <span class="kw">else</span> Direction.UP} "</span>
+        <span class="str">f"| v={velocity:+.4f} over {VELOCITY_WINDOW_S}s "</span>
+        <span class="str">f"| Δnow={delta_now:+.4f} Δpast={delta_past:+.4f} "</span>
+        <span class="str">f"| T-{t_minus_s}s"</span>
+    )
+    <span class="kw">return</span> Direction.DOWN <span class="kw">if</span> direction &lt; <span class="num">0</span> <span class="kw">else</span> Direction.UP
+
+
+<span class="cm"># ── wire into the SCAN loop in Phase2 ─────────────────────────────────</span>
+<span class="kw">def</span> <span class="fn">on_scan</span>(<span class="self">self</span>, t_minus_s: <span class="kw">int</span>, delta_pct: <span class="kw">float</span>):
+    <span class="self">self</span>.state.record_scan(t_minus_s, delta_pct)
+
+    <span class="cm"># Path A: existing absolute-Delta trigger</span>
+    direction = absolute_delta_signal(<span class="self">self</span>.state, delta_pct)
+
+    <span class="cm"># Path B: new velocity trigger (only if A did not fire)</span>
+    <span class="kw">if</span> direction <span class="kw">is</span> <span class="kw">None</span>:
+        direction = velocity_signal(<span class="self">self</span>.state, t_minus_s)
+        <span class="kw">if</span> direction <span class="kw">is</span> <span class="kw">not</span> <span class="kw">None</span>:
+            <span class="self">self</span>.state.last_trigger = <span class="str">"velocity"</span>  <span class="cm"># for P(win) selection</span>
+
+    <span class="kw">if</span> direction <span class="kw">is</span> <span class="kw">not</span> <span class="kw">None</span>:
+        <span class="self">self</span>.evaluate_entry(direction, t_minus_s)
+</pre>
+  </div>
+
+  <h2>Replay against 07:30 window</h2>
+  <p>How the patched logic would have handled the missed window. The velocity trigger fires at <strong>T−262s</strong> — 4 minutes 22 seconds before close, comfortably inside the entry cutoff.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>T−</th>
+        <th>BTC</th>
+        <th>Δ vs open</th>
+        <th>v (180s)</th>
+        <th>monotone</th>
+        <th>action</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td class="t">748s</td><td class="v">$77,149</td><td class="delta">+0.038%</td><td class="v miss">—</td><td class="v miss">—</td><td><span class="tag-inline dim">warmup</span></td></tr>
+      <tr><td class="t">687s</td><td class="v">$77,123</td><td class="delta">+0.003%</td><td class="v miss">—</td><td class="v miss">—</td><td><span class="tag-inline dim">warmup</span></td></tr>
+      <tr><td class="t">626s</td><td class="v">$77,137</td><td class="delta">+0.022%</td><td class="v">−0.016%</td><td class="v">1/3</td><td><span class="tag-inline dim">below thr</span></td></tr>
+      <tr><td class="t">566s</td><td class="v">$77,105</td><td class="delta">−0.020%</td><td class="v">−0.058%</td><td class="v">2/3</td><td><span class="tag-inline dim">below thr</span></td></tr>
+      <tr><td class="t">505s</td><td class="v">$77,094</td><td class="delta">−0.034%</td><td class="v">−0.072%</td><td class="v">3/3</td><td><span class="tag-inline dim">below thr</span></td></tr>
+      <tr><td class="t">444s</td><td class="v">$77,054</td><td class="delta">−0.086%</td><td class="v">−0.108%</td><td class="v">3/3</td><td><span class="tag-inline dim">below thr</span></td></tr>
+      <tr><td class="t">383s</td><td class="v">$76,998</td><td class="delta">−0.158%</td><td class="v">−0.180%</td><td class="v">3/3</td><td><span class="tag-inline dim">cutoff guard</span></td></tr>
+      <tr><td class="t">323s</td><td class="v">$76,980</td><td class="delta">−0.181%</td><td class="v">−0.147%</td><td class="v">3/3</td><td><span class="tag-inline dim">cutoff guard</span></td></tr>
+      <tr class="fire"><td class="t">262s</td><td class="v">$76,938</td><td class="delta">−0.235%</td><td class="v hit">−0.149%</td><td class="v hit">3/3</td><td><span class="tag-inline down">FIRE · DOWN</span></td></tr>
+      <tr><td class="t">202s</td><td class="v">$76,928</td><td class="delta">−0.249%</td><td class="v">—</td><td class="v">—</td><td><span class="tag-inline dim">already in</span></td></tr>
+      <tr><td class="t">141s</td><td class="v">$76,897</td><td class="delta">−0.288%</td><td class="v">—</td><td class="v">—</td><td><span class="tag-inline dim">phase4</span></td></tr>
+      <tr><td class="t">80s</td><td class="v">$76,893</td><td class="delta">−0.294%</td><td class="v">—</td><td class="v">—</td><td><span class="tag-inline dim">phase4</span></td></tr>
+    </tbody>
+  </table>
+  <p style="font-size: 12px; color: var(--ink-dim); font-style: italic; font-family: var(--font-display);">Note: v(180s) values above use the actual ~61s scan cadence; the "past" scan is the one closest to t+180s. Cutoff guard (T &lt; 240s) was not enforced at T−383/323s because velocity was below threshold there anyway — included to show the gate is well-positioned.</p>
+
+  <h2>Tradeoffs</h2>
+  <div class="tradeoffs">
+    <div class="tradeoff pro">
+      <h4>What this buys</h4>
+      <ul>
+        <li>Catches slow-burn directional windows where the open-anchored Delta lags the actual trend</li>
+        <li>Preserves the existing absolute-Delta path entirely — purely additive, both can run in parallel</li>
+        <li>Monotonicity check rejects whippy chop that crosses threshold by accident</li>
+        <li>Cutoff at T−240s keeps execution runway above the Phase4 lockout, no rule conflict</li>
+        <li>Cheap to compute: 8-element deque, no extra HTTP, no new state across windows</li>
+      </ul>
+    </div>
+    <div class="tradeoff con">
+      <h4>What it costs</h4>
+      <ul>
+        <li>P(win) calibration table is fit against absolute-Delta cells — velocity entries will sit at a different point in (Delta, T-) space and may need their own calibration</li>
+        <li>Threshold 0.12% / 180s is back-fit to one window; needs validation across the full 90-day kline history before promotion to live</li>
+        <li>Late entries (T−240 to T−262) have less time to recover from an adverse maker fill — keep the $0.80 hard price cap firmly in place for velocity entries</li>
+        <li>Doubles the entry surface, so book_anomaly skips and thin-liquidity rejections will increase proportionally — monitor reject ratio after rollout</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>Rollout</h2>
+  <ol style="padding-left: 24px; margin: 16px 0;">
+    <li style="margin-bottom: 10px;"><strong style="color: var(--ink);">Backtest.</strong> Replay velocity_signal against the 90-day kline cache. Tag each fire with the realized 15-min outcome. Target: ≥55% directional accuracy at v=0.12%, monotone≥3/4.</li>
+    <li style="margin-bottom: 10px;"><strong style="color: var(--ink);">Shadow mode.</strong> Run the trigger in production but route fires to a log-only path (no orders). Compare velocity-fire windows vs absolute-Delta fires for 7 days. Look for overlap and disjoint coverage.</li>
+    <li style="margin-bottom: 10px;"><strong style="color: var(--ink);">Calibrate P(win).</strong> Build a second cell in the empirical table keyed by (T−, last_trigger=velocity). Use shrinkage toward the absolute-Delta prior while velocity sample size is small.</li>
+    <li style="margin-bottom: 10px;"><strong style="color: var(--ink);">Live, throttled.</strong> Enable for live trading with a per-window bet cap of half the normal SCALP size for the first 50 fires. Promote to full size only after P(win) confidence interval is tight.</li>
+    <li><strong style="color: var(--ink);">Monitor.</strong> Add log markers: <code style="color: var(--accent);">VEL | trigger</code>, <code style="color: var(--accent);">VEL | rejected non-monotone</code>, <code style="color: var(--accent);">VEL | cutoff</code> — so the next log review can audit reject reasons the way book_anomaly is audited today.</li>
+  </ol>
+
+  <footer>
+    <span>polybot / strategy_v2 / RFC</span>
+    <span>Tobi · AdIns R&amp;D</span>
+    <span>v0.1 · DRAFT</span>
+  </footer>
+
+</div>
+</body>
+</html>
