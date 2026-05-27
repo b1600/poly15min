@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>polybot — strategy summary 2026-05-28</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0e0c;
+    --bg-elev: #14160f;
+    --ink: #d4d4c8;
+    --ink-dim: #7a7c70;
+    --ink-faint: #44463d;
+    --rule: #23251c;
+    --accent: #d4ff3a;
+    --warn: #ff7a3a;
+    --down: #ff5577;
+    --up: #66e0a0;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+    --font-display: 'Fraunces', Georgia, serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 14px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(212,255,58,0.04), transparent),
+      linear-gradient(var(--rule) 1px, transparent 1px),
+      linear-gradient(90deg, var(--rule) 1px, transparent 1px);
+    background-size: 100% 100%, 64px 64px, 64px 64px;
+    background-position: 0 0, 0 0, 0 0;
+    min-height: 100vh;
+    padding: 48px 24px 96px;
+  }
+
+  .page { max-width: 860px; margin: 0 auto; }
+
+  /* ── Header ── */
+  .header { border-bottom: 1px solid var(--rule); padding-bottom: 28px; margin-bottom: 40px; }
+  .header-meta {
+    display: flex; gap: 12px; align-items: center;
+    font-size: 11px; color: var(--ink-dim); letter-spacing: 0.08em; text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  .header-meta span { color: var(--accent); }
+  h1 {
+    font-family: var(--font-display);
+    font-size: clamp(28px, 5vw, 48px);
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: #fff;
+  }
+  h1 em { color: var(--accent); font-style: normal; }
+  .subtitle { margin-top: 10px; color: var(--ink-dim); font-size: 13px; max-width: 600px; }
+
+  /* ── Section headers ── */
+  h2 {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 16px;
+    margin-top: 48px;
+    padding-top: 48px;
+    border-top: 1px solid var(--rule);
+  }
+  h2:first-of-type { margin-top: 0; padding-top: 0; border-top: none; }
+  h3 {
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    margin-bottom: 10px;
+    margin-top: 28px;
+  }
+
+  /* ── Phase timeline ── */
+  .timeline {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 0;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .tl-row {
+    display: contents;
+  }
+  .tl-row:not(:last-child) .tl-time,
+  .tl-row:not(:last-child) .tl-body {
+    border-bottom: 1px solid var(--rule);
+  }
+  .tl-time {
+    background: var(--bg-elev);
+    padding: 12px 14px;
+    font-size: 11px;
+    color: var(--ink-dim);
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+  }
+  .tl-time strong { display: block; font-size: 13px; color: var(--accent); font-weight: 500; }
+  .tl-body {
+    padding: 12px 16px;
+    border-left: 1px solid var(--rule);
+    font-size: 13px;
+    color: var(--ink);
+  }
+  .tl-body strong { color: #fff; }
+  .tl-body p + p { margin-top: 6px; }
+
+  /* ── Strategy cards ── */
+  .card-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 4px;
+  }
+  @media (max-width: 620px) { .card-grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--bg-elev);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 20px;
+  }
+  .card-label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em;
+    color: var(--ink-dim); margin-bottom: 8px;
+  }
+  .card-name {
+    font-size: 18px; font-weight: 700; color: var(--accent);
+    font-family: var(--font-display); margin-bottom: 12px;
+  }
+  .card .kv { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--rule); font-size: 12px; }
+  .card .kv:last-child { border-bottom: none; }
+  .card .kv .k { color: var(--ink-dim); }
+  .card .kv .v { color: var(--ink); font-weight: 500; }
+  .card .kv .v.up { color: var(--up); }
+  .card .kv .v.warn { color: var(--warn); }
+
+  /* ── Velocity box ── */
+  .vel-card {
+    background: var(--bg-elev);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 20px;
+    margin-top: 4px;
+  }
+  .vel-card .vel-header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; }
+  .vel-card .vel-name { font-size: 15px; font-weight: 700; color: var(--accent); font-family: var(--font-display); }
+  .vel-card .vel-tag { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-dim); }
+  .condition-list { list-style: none; }
+  .condition-list li {
+    display: flex; gap: 10px; align-items: flex-start;
+    padding: 7px 0; border-bottom: 1px solid var(--rule);
+    font-size: 12px;
+  }
+  .condition-list li:last-child { border-bottom: none; }
+  .condition-list .num { color: var(--accent); font-weight: 700; flex-shrink: 0; }
+  .condition-list .desc { color: var(--ink); }
+  .condition-list .desc em { color: var(--ink-dim); font-style: normal; }
+
+  /* ── Probability model ── */
+  .prob-table-wrap { overflow-x: auto; margin-top: 4px; }
+  table.prob-table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 11px;
+  }
+  table.prob-table th {
+    background: var(--bg-elev);
+    color: var(--ink-dim);
+    text-align: center;
+    padding: 8px 10px;
+    border: 1px solid var(--rule);
+    font-weight: 400;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+  }
+  table.prob-table th.row-head { text-align: left; color: var(--accent); }
+  table.prob-table td {
+    text-align: center;
+    padding: 7px 10px;
+    border: 1px solid var(--rule);
+    color: var(--ink);
+  }
+  table.prob-table td.label { color: var(--ink-dim); background: var(--bg-elev); }
+  table.prob-table td.high { color: var(--up); }
+  table.prob-table td.mid  { color: var(--accent); }
+  table.prob-table td.low  { color: var(--down); }
+
+  /* ── Risk controls ── */
+  .risk-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+    margin-top: 4px;
+  }
+  .risk-item {
+    background: var(--bg-elev);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 14px 16px;
+  }
+  .risk-item .ri-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-dim); margin-bottom: 6px; }
+  .risk-item .ri-value { font-size: 18px; color: var(--accent); font-weight: 700; }
+  .risk-item .ri-note { font-size: 11px; color: var(--ink-dim); margin-top: 4px; }
+
+  /* ── Position management ── */
+  .exit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 4px; }
+  @media (max-width: 540px) { .exit-grid { grid-template-columns: 1fr; } }
+  .exit-card {
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 16px;
+  }
+  .exit-card .ec-trigger { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--warn); margin-bottom: 8px; }
+  .exit-card .ec-cond { font-size: 13px; color: #fff; font-weight: 500; margin-bottom: 8px; }
+  .exit-card .ec-why { font-size: 12px; color: var(--ink-dim); }
+
+  /* ── Calibration ── */
+  .calibration-info {
+    background: var(--bg-elev);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 20px;
+    margin-top: 4px;
+    font-size: 13px;
+  }
+  .calibration-info .ci-row { display: flex; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--rule); }
+  .calibration-info .ci-row:last-child { border-bottom: none; }
+  .calibration-info .ci-k { color: var(--ink-dim); flex: 0 0 180px; }
+  .calibration-info .ci-v { color: var(--ink); }
+
+  /* ── Execution flow ── */
+  .flow { display: flex; flex-direction: column; gap: 0; margin-top: 4px; }
+  .flow-step {
+    display: flex; gap: 16px; align-items: flex-start;
+    padding: 14px 0; border-bottom: 1px solid var(--rule);
+    font-size: 13px;
+  }
+  .flow-step:last-child { border-bottom: none; }
+  .flow-num { color: var(--accent); font-weight: 700; flex-shrink: 0; width: 20px; }
+  .flow-content .fc-title { color: #fff; font-weight: 500; margin-bottom: 3px; }
+  .flow-content .fc-detail { color: var(--ink-dim); font-size: 12px; }
+
+  /* ── Misc ── */
+  .tag {
+    display: inline-block; padding: 2px 7px;
+    background: rgba(212,255,58,0.1); border: 1px solid rgba(212,255,58,0.25);
+    border-radius: 3px; font-size: 11px; color: var(--accent);
+    vertical-align: middle; margin-right: 4px;
+  }
+  .tag.warn { background: rgba(255,122,58,0.1); border-color: rgba(255,122,58,0.25); color: var(--warn); }
+  .tag.down { background: rgba(255,85,119,0.1); border-color: rgba(255,85,119,0.25); color: var(--down); }
+  p { color: var(--ink-dim); font-size: 13px; line-height: 1.7; }
+  p + p { margin-top: 10px; }
+  .note {
+    border-left: 2px solid var(--warn);
+    padding: 10px 14px;
+    background: rgba(255,122,58,0.05);
+    border-radius: 0 4px 4px 0;
+    font-size: 12px;
+    color: var(--ink-dim);
+    margin-top: 12px;
+  }
+  .note strong { color: var(--warn); }
+  code {
+    background: rgba(212,255,58,0.08);
+    border: 1px solid rgba(212,255,58,0.15);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-family: var(--font-mono);
+    font-size: 0.92em;
+    color: var(--accent);
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ── HEADER ── -->
+  <div class="header">
+    <div class="header-meta">
+      <span>polybot</span>
+      <span style="color:var(--ink-faint)">·</span>
+      strategy snapshot
+      <span style="color:var(--ink-faint)">·</span>
+      2026-05-28
+    </div>
+    <h1>BTC 15-min binary<br><em>strategy reference</em></h1>
+    <p class="subtitle">
+      Complete operational summary of the live CombinedStrategy — three entry paths,
+      empirical probability model, GTC/IOC execution, and risk controls.
+    </p>
+  </div>
+
+  <!-- ── OVERVIEW ── -->
+  <h2>Overview</h2>
+  <p>
+    The bot trades Polymarket's BTC Up/Down binary markets that resolve every 15 minutes.
+    Each window is resolved based on whether the Binance BTC spot price closes above or below
+    the window open price. The bot holds at most <strong style="color:#fff">3 positions per window</strong>
+    (1 momentum + 1 scalp + 1 velocity), uses GTC maker orders for momentum entries and
+    single-shot IOC taker orders for scalp/velocity entries, and exits positions only via
+    profit-lock or edge-inversion triggers during Phase 3.
+  </p>
+  <p>
+    Market-making was removed from the strategy after live testing confirmed that Polymarket's
+    CLOB fills aggressive bids immediately as taker, making the cancel-after-fill approach
+    unprofitable in live mode. The current design is purely directional.
+  </p>
+
+  <!-- ── PHASE TIMELINE ── -->
+  <h2>Phase Timeline</h2>
+  <div class="timeline">
+    <div class="tl-row">
+      <div class="tl-time"><strong>Phase 0</strong>always-on</div>
+      <div class="tl-body">
+        <strong>Background maintenance</strong>
+        <p>Binance aggTrade WebSocket keeps a 3600-tick (60-min) price history.
+        EMA-10s and EMA-60s are updated on every trade. Calibration table is refreshed
+        every 24h from 90 days of 1-min klines. Volatility regime is tracked continuously.</p>
+      </div>
+    </div>
+    <div class="tl-row">
+      <div class="tl-time"><strong>Phase 1</strong>T−13:00→T−13:00<br><small style="color:var(--ink-faint)">T-900→T-780s</small></div>
+      <div class="tl-body">
+        <strong>Market fetch &amp; liquidity gate</strong>
+        <p>Fetch Polymarket CLOB market for the current window slug. Confirm best bid/ask
+        depth ≥ $50 on at least one side. Skip if thin. No trades placed here.</p>
+      </div>
+    </div>
+    <div class="tl-row">
+      <div class="tl-time"><strong>Phase 2</strong>T−13:00→T−3:00<br><small style="color:var(--ink-faint)">T-780→T-180s</small></div>
+      <div class="tl-body">
+        <strong>Main entry window</strong>
+        <p>Three entry paths evaluated on every 5s tick in priority order:
+        <span class="tag">Momentum</span> (T-780→T-480) →
+        <span class="tag">Scalp</span> (absolute delta gate) →
+        <span class="tag">Velocity</span> (slow-burn directional).
+        Delta snapshots are recorded every ~55s to build the velocity history deque.</p>
+      </div>
+    </div>
+    <div class="tl-row">
+      <div class="tl-time"><strong>Phase 3</strong>after any fill</div>
+      <div class="tl-body">
+        <strong>Position management</strong>
+        <p>Open positions are re-evaluated every 5s tick. Two exit triggers:
+        <span class="tag warn">lock_profit</span> when token price ≥ 0.85,
+        and <span class="tag down">edge_inverted</span> when model P(win) &lt; market price by &gt;5%.</p>
+      </div>
+    </div>
+    <div class="tl-row">
+      <div class="tl-time"><strong>Phase 4</strong>T−3:00→T−0:30<br><small style="color:var(--ink-faint)">T-180→T-30s</small></div>
+      <div class="tl-body">
+        <strong>Closing-window rules</strong>
+        <p>Tighter thresholds: scalp only fires if delta ≥ 0.25% <em>and</em> edge ≥ 7%.
+        Skip if delta &lt; 0.10% with &lt;90s remaining (coinflip). No momentum entries.
+        No new entries at all after T-30.</p>
+      </div>
+    </div>
+    <div class="tl-row">
+      <div class="tl-time"><strong>Phase 5</strong>T+0:00→T+8:00</div>
+      <div class="tl-body">
+        <strong>Resolution &amp; cleanup</strong>
+        <p>Background task waits RESOLUTION_WAIT (480s) then cancels surviving GTC
+        momentum orders. P&amp;L is resolved using live Binance BTC prices at window open vs close
+        (avoids Polymarket settlement lag). Redemption is handled by a separate bot process.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── ENTRY STRATEGIES ── -->
+  <h2>Entry Strategies</h2>
+
+  <div class="card-grid">
+
+    <!-- Momentum -->
+    <div class="card">
+      <div class="card-label">Strategy A</div>
+      <div class="card-name">Early Momentum</div>
+      <div class="kv"><span class="k">window</span><span class="v">T-780 → T-480</span></div>
+      <div class="kv"><span class="k">fires per window</span><span class="v">once max</span></div>
+      <div class="kv"><span class="k">delta threshold</span><span class="v up">≥ 0.30% BTC move</span></div>
+      <div class="kv"><span class="k">min net edge</span><span class="v up">5%</span></div>
+      <div class="kv"><span class="k">price cap</span><span class="v warn">≤ 0.85</span></div>
+      <div class="kv"><span class="k">sizing</span><span class="v">half-Kelly (0.50)</span></div>
+      <div class="kv"><span class="k">max bet</span><span class="v">10% of bankroll</span></div>
+      <div class="kv"><span class="k">min bet / shares</span><span class="v">$2.50 / 5 shares</span></div>
+      <div class="kv"><span class="k">order type</span><span class="v">GTC maker limit bid</span></div>
+      <div class="kv"><span class="k">max_price buffer</span><span class="v">+3–4¢ above min-edge</span></div>
+    </div>
+
+    <!-- Scalp -->
+    <div class="card">
+      <div class="card-label">Strategy B</div>
+      <div class="card-name">Mid-Window Scalp</div>
+      <div class="kv"><span class="k">window (Phase 2)</span><span class="v">T-780 → T-180</span></div>
+      <div class="kv"><span class="k">window (Phase 4)</span><span class="v">T-180 → T-30</span></div>
+      <div class="kv"><span class="k">fires per window</span><span class="v">once max</span></div>
+      <div class="kv"><span class="k">delta threshold (P2)</span><span class="v up">≥ 0.20%</span></div>
+      <div class="kv"><span class="k">delta threshold (P4)</span><span class="v up">≥ 0.25%</span></div>
+      <div class="kv"><span class="k">min net edge (P2)</span><span class="v up">5%</span></div>
+      <div class="kv"><span class="k">min net edge (P4)</span><span class="v up">7%</span></div>
+      <div class="kv"><span class="k">price cap</span><span class="v warn">≤ 0.85</span></div>
+      <div class="kv"><span class="k">sizing</span><span class="v">eighth-Kelly (0.125)</span></div>
+      <div class="kv"><span class="k">max bet</span><span class="v">10% of bankroll</span></div>
+      <div class="kv"><span class="k">order type</span><span class="v">IOC taker (book-depth check first)</span></div>
+    </div>
+  </div>
+
+  <!-- Velocity -->
+  <h3>Strategy C — Velocity Trigger (Path B helper)</h3>
+  <div class="vel-card">
+    <div class="vel-header">
+      <span class="vel-name">Slow-Burn Directional</span>
+      <span class="vel-tag">fires if scalp slot unused &amp; T ≥ 240s</span>
+    </div>
+    <p style="margin-bottom:14px;font-size:12px;">
+      Detects markets where BTC has drifted consistently in one direction over the
+      prior 3 minutes — too slow to trigger the absolute-delta scalp gate but with
+      enough persistence to warrant a directional entry. Uses the same sizing
+      as Scalp (eighth-Kelly) but with a tighter price cap of 0.80.
+    </p>
+    <ul class="condition-list">
+      <li>
+        <span class="num">1</span>
+        <span class="desc">
+          <strong style="color:#fff">Delta velocity ≥ 0.12%</strong>
+          <em> — |delta_now − delta_180s_ago| ≥ 0.0012 in fraction units</em>
+        </span>
+      </li>
+      <li>
+        <span class="num">2</span>
+        <span class="desc">
+          <strong style="color:#fff">Monotone confirmation ≥ 3/3 consecutive diffs</strong>
+          <em> — of the last 4 snapshots (recorded every ~55s), at least 3 consecutive pair-diffs must agree with velocity direction</em>
+        </span>
+      </li>
+      <li>
+        <span class="num">3</span>
+        <span class="desc">
+          <strong style="color:#fff">Runway ≥ 240s remaining</strong>
+          <em> — won't fire with fewer than 4 minutes left; not enough time for a slow trend to hold</em>
+        </span>
+      </li>
+      <li>
+        <span class="num">4</span>
+        <span class="desc">
+          <strong style="color:#fff">Tight price cap ≤ 0.80</strong>
+          <em> — momentum entries use 0.85; velocity uses 0.80 because late entries have less recovery runway</em>
+        </span>
+      </li>
+      <li>
+        <span class="num">5</span>
+        <span class="desc">
+          <strong style="color:#fff">Net edge ≥ 5% after taker fee</strong>
+          <em> — same gate as scalp; velocity entries share the scalp slot (once fired, scalp cannot also fire)</em>
+        </span>
+      </li>
+    </ul>
+  </div>
+
+  <!-- ── PROBABILITY MODEL ── -->
+  <h2>Probability Model</h2>
+  <p>
+    P(Up wins) is estimated via bilinear interpolation on an empirical lookup table keyed by
+    <code>(seconds_remaining, delta%)</code>. The table is rebuilt daily from 90 days of
+    Binance 1-min BTC klines via <code>calibrate_model.py</code>. Values are clamped to
+    [0.05, 0.95]. The model accepts a <code>volatility</code> argument for API compatibility
+    but does not use it — regime-average volatility is already baked into the table.
+  </p>
+  <h3>Empirical table sample (current hardcoded fallback)</h3>
+  <div class="prob-table-wrap">
+    <table class="prob-table">
+      <thead>
+        <tr>
+          <th class="row-head">T-remaining</th>
+          <th>−0.30%</th>
+          <th>−0.20%</th>
+          <th>−0.10%</th>
+          <th>0.00%</th>
+          <th>+0.10%</th>
+          <th>+0.20%</th>
+          <th>+0.30%</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="label">720s (12min)</td>
+          <td class="low">14.6%</td>
+          <td class="low">24.1%</td>
+          <td class="low">28.5%</td>
+          <td class="mid">50.2%</td>
+          <td class="high">72.5%</td>
+          <td class="high">81.8%</td>
+          <td class="high">87.0%</td>
+        </tr>
+        <tr>
+          <td class="label">540s (9min)</td>
+          <td class="low">6.6%</td>
+          <td class="low">17.3%</td>
+          <td class="low">23.9%</td>
+          <td class="mid">50.1%</td>
+          <td class="high">75.9%</td>
+          <td class="high">84.3%</td>
+          <td class="high">93.3%</td>
+        </tr>
+        <tr>
+          <td class="label">360s (6min)</td>
+          <td class="low">4.1%</td>
+          <td class="low">8.7%</td>
+          <td class="low">16.5%</td>
+          <td class="mid">50.7%</td>
+          <td class="high">82.9%</td>
+          <td class="high">90.9%</td>
+          <td class="high">96.7%</td>
+        </tr>
+        <tr>
+          <td class="label">180s (3min)</td>
+          <td class="low">0.5%</td>
+          <td class="low">1.1%</td>
+          <td class="low">9.0%</td>
+          <td class="mid">51.6%</td>
+          <td class="high">91.7%</td>
+          <td class="high">97.4%</td>
+          <td class="high">100%</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="margin-top:10px;">
+    Bilinear interpolation is used between the four time rows. The daily calibration run
+    (<code>--days 90</code>) regenerates this table and saves it to
+    <code>calibration_table.json</code>, which the bot loads at startup.
+  </p>
+
+  <!-- ── SIZING & KELLY ── -->
+  <h2>Position Sizing</h2>
+  <p>
+    All strategies use fractional Kelly sizing derived from the model edge. The formula is
+    standard Kelly with the binary payoff structure, then scaled by a per-strategy Kelly fraction,
+    capped at 10% of bankroll, and floored at $2.50 / 5 shares (Polymarket GTC minimum).
+  </p>
+  <h3>Kelly formula</h3>
+  <div class="calibration-info">
+    <div class="ci-row"><span class="ci-k">Kelly fraction (f*)</span><span class="ci-v"><code>(b·p − q) / b</code> where b = (1−price)/price, p = P(win), q = 1−p</span></div>
+    <div class="ci-row"><span class="ci-k">Momentum fraction</span><span class="ci-v">0.50 × f* (half-Kelly)</span></div>
+    <div class="ci-row"><span class="ci-k">Scalp fraction</span><span class="ci-v">0.125 × f* (eighth-Kelly)</span></div>
+    <div class="ci-row"><span class="ci-k">Velocity fraction</span><span class="ci-v">0.125 × f* (same as scalp)</span></div>
+    <div class="ci-row"><span class="ci-k">Max bet (all strategies)</span><span class="ci-v">10% of current bankroll</span></div>
+    <div class="ci-row"><span class="ci-k">Kelly throttle (Rec 4C)</span><span class="ci-v">Halved to 0.5× if rolling win rate lags model by &gt;10% over last 20 trades. Restored to 1.0× when gap closes.</span></div>
+    <div class="ci-row"><span class="ci-k">Taker fee model</span><span class="ci-v"><code>4 × p × (1−p) × 0.0156</code> deducted from gross edge before threshold check</span></div>
+  </div>
+
+  <!-- ── EXECUTION ── -->
+  <h2>Order Execution</h2>
+
+  <h3>Momentum — GTC maker bid</h3>
+  <div class="flow">
+    <div class="flow-step">
+      <span class="flow-num">1</span>
+      <div class="flow-content">
+        <div class="fc-title">Post GTC limit bid at max_price</div>
+        <div class="fc-detail">max_price = min(prob_win − min_edge + buffer, 0.95). Buffer is +4¢ if edge ≥ 10%, else +3¢. This is where the order rests in the book.</div>
+      </div>
+    </div>
+    <div class="flow-step">
+      <span class="flow-num">2</span>
+      <div class="flow-content">
+        <div class="fc-title">Adverse-fill monitor spawned (every 15s)</div>
+        <div class="fc-detail">Cancels if: best ask falls &gt;2¢ below our bid (signal reversed), best bid jumps above our bid (adverse selection), or a lone ask ≥$0.95 appears (post-resolution book).</div>
+      </div>
+    </div>
+    <div class="flow-step">
+      <span class="flow-num">3</span>
+      <div class="flow-content">
+        <div class="fc-title">Cleanup at window close</div>
+        <div class="fc-detail">Momentum GTC orders are intentionally left open for RESOLUTION_WAIT (480s) to allow late fills during the oracle settlement period. All other order types are cancelled immediately.</div>
+      </div>
+    </div>
+    <div class="flow-step">
+      <span class="flow-num">4</span>
+      <div class="flow-content">
+        <div class="fc-title">Background task cancels after +480s</div>
+        <div class="fc-detail">Checks order status via CLOB API. Logs fill amount (size_matched) or marks cancelled. Then resolves P&amp;L and refreshes bankroll.</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Scalp / Velocity — single-shot IOC taker</h3>
+  <div class="flow">
+    <div class="flow-step">
+      <span class="flow-num">1</span>
+      <div class="flow-content">
+        <div class="fc-title">Book depth check</div>
+        <div class="fc-detail">Fetch full order book. Skip if no asks. Skip if best ask ≥ $0.95 (post-resolution anomaly) or best ask &gt; max_price. Log snapshot of top 5 asks/bids.</div>
+      </div>
+    </div>
+    <div class="flow-step">
+      <span class="flow-num">2</span>
+      <div class="flow-content">
+        <div class="fc-title">Single IOC order at max_price</div>
+        <div class="fc-detail">One attempt, no retry. CLOB may return size_matched=0 synchronously — if so, a follow-up status fetch confirms the actual fill. IOC orders self-cancel if not immediately matched.</div>
+      </div>
+    </div>
+    <div class="flow-step">
+      <span class="flow-num">3</span>
+      <div class="flow-content">
+        <div class="fc-title">30s cooldown on skip</div>
+        <div class="fc-detail">If the book check fails or best ask exceeds max_price, a 30s scalp cooldown is set to avoid hammering the API on a stale book. The scalp slot remains available after the cooldown expires.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── POSITION MANAGEMENT ── -->
+  <h2>Position Management (Phase 3)</h2>
+  <div class="exit-grid">
+    <div class="exit-card">
+      <div class="ec-trigger">Exit trigger 1</div>
+      <div class="ec-cond">Token price ≥ 0.85</div>
+      <div class="ec-why">Marginal EV from holding is tiny while downside is still real. Sell to lock profit. Label: <code>lock_profit</code>.</div>
+    </div>
+    <div class="exit-card">
+      <div class="ec-trigger">Exit trigger 2</div>
+      <div class="ec-cond">Model P(win) &lt; market price − 5%</div>
+      <div class="ec-why">Edge has inverted — we're now paying premium to stay in a position the model thinks is wrong. Cut the loss. Label: <code>edge_inverted</code>.</div>
+    </div>
+  </div>
+  <div class="note" style="margin-top:16px;">
+    <strong>Note:</strong> Phase 3 is evaluated every 5s tick. Exit signals are returned as a list of dicts with
+    <code>token_id</code>, <code>side</code>, <code>shares</code>, <code>reason</code>, and <code>current_price</code>.
+    The bot loop is responsible for placing actual sell orders; <code>evaluate_exits()</code> only signals intent.
+  </div>
+
+  <!-- ── RISK CONTROLS ── -->
+  <h2>Risk Controls</h2>
+  <div class="risk-grid">
+    <div class="risk-item">
+      <div class="ri-label">Daily loss circuit breaker</div>
+      <div class="ri-value">25%</div>
+      <div class="ri-note">Stops trading for 30 min if session drawdown exceeds 25% from start bankroll.</div>
+    </div>
+    <div class="risk-item">
+      <div class="ri-label">Max trades per window</div>
+      <div class="ri-value">3</div>
+      <div class="ri-note">Hard cap. At most 1 momentum + 1 scalp + 1 velocity can fire in a single window.</div>
+    </div>
+    <div class="risk-item">
+      <div class="ri-label">Global price cap</div>
+      <div class="ri-value">0.85</div>
+      <div class="ri-note">Never buy a token above $0.85. Payoff ratio becomes too unfavorable above this threshold.</div>
+    </div>
+    <div class="risk-item">
+      <div class="ri-label">Velocity price cap</div>
+      <div class="ri-value">0.80</div>
+      <div class="ri-note">Tighter cap for late velocity entries that have less runway to recover from an adverse fill.</div>
+    </div>
+    <div class="risk-item">
+      <div class="ri-label">Late-entry cutoff</div>
+      <div class="ri-value">T−30s</div>
+      <div class="ri-note">No new entries within 30s of window close. Not enough time to exit if wrong.</div>
+    </div>
+    <div class="risk-item">
+      <div class="ri-label">Kelly throttle threshold</div>
+      <div class="ri-value">−10%</div>
+      <div class="ri-note">Bets halved when rolling win rate lags model by &gt;10% over the last 20 resolved trades.</div>
+    </div>
+    <div class="risk-item">
+      <div class="ri-label">Stale feed guard</div>
+      <div class="ri-value">10s</div>
+      <div class="ri-note">Bot skips window entry if Binance WebSocket has not delivered a price update in &gt;10s.</div>
+    </div>
+    <div class="risk-item">
+      <div class="ri-label">Bankroll sync</div>
+      <div class="ri-value">each window</div>
+      <div class="ri-note">CLOB USDC balance is fetched at window start and after resolution to correct internal drift.</div>
+    </div>
+  </div>
+
+  <!-- ── CALIBRATION LOOP ── -->
+  <h2>Calibration Loop</h2>
+  <p>
+    The bot runs a background calibration task (Phase 0) that rebuilds the empirical
+    probability table from historical data. This keeps the model aligned with the current
+    BTC volatility regime without manual intervention.
+  </p>
+  <div class="calibration-info" style="margin-top:16px;">
+    <div class="ci-row"><span class="ci-k">Data source</span><span class="ci-v">Binance REST API — 1-min BTCUSDT klines</span></div>
+    <div class="ci-row"><span class="ci-k">History window</span><span class="ci-v">90 days</span></div>
+    <div class="ci-row"><span class="ci-k">Refresh interval</span><span class="ci-v">every 24h (86400s)</span></div>
+    <div class="ci-row"><span class="ci-k">Startup behaviour</span><span class="ci-v">Loads <code>calibration_table.json</code> from disk immediately; schedules live refresh in background</span></div>
+    <div class="ci-row"><span class="ci-k">Failure handling</span><span class="ci-v">Errors logged; hardcoded fallback table remains active — bot never stops for calibration failure</span></div>
+    <div class="ci-row"><span class="ci-k">Table structure</span><span class="ci-v">4 time rows × variable delta buckets → P(Up wins) empirical win rate</span></div>
+    <div class="ci-row"><span class="ci-k">Save path</span><span class="ci-v"><code>calibration_table.json</code> (gitignored)</span></div>
+  </div>
+
+  <!-- ── PRICE FEED ── -->
+  <h2>Price Feed</h2>
+  <p>
+    Real-time BTC prices are sourced from the Binance <code>btcusdt@aggTrade</code> WebSocket
+    stream (10–50 messages/second). The feed maintains a 3600-tick downsampled history
+    (one entry per second) and tracks EMA-10s and EMA-60s on every tick for trend signal.
+  </p>
+  <div class="calibration-info" style="margin-top:12px;">
+    <div class="ci-row"><span class="ci-k">Window open price</span><span class="ci-v">Auto-captured at each 15-min boundary from the live feed</span></div>
+    <div class="ci-row"><span class="ci-k">Window delta</span><span class="ci-v"><code>(current_price − window_open_price) / window_open_price</code></span></div>
+    <div class="ci-row"><span class="ci-k">Volatility</span><span class="ci-v">Std-dev of last N price changes from history (lookback=30 ticks by default)</span></div>
+    <div class="ci-row"><span class="ci-k">Stale threshold</span><span class="ci-v">10s without update — bot skips window entry if stale</span></div>
+    <div class="ci-row"><span class="ci-k">Reconnect</span><span class="ci-v">Exponential backoff (1s base → 30s max) on WebSocket disconnect</span></div>
+    <div class="ci-row"><span class="ci-k">Vol regime</span><span class="ci-v">Tracked via EMA spread and recent realized vol; exposed via <code>get_vol_regime()</code></span></div>
+  </div>
+
+  <!-- ── RESOLUTION ── -->
+  <h2>Resolution &amp; Redemption</h2>
+  <p>
+    P&amp;L is resolved using the live Binance BTC prices at window open and close — not
+    Polymarket's settlement. This avoids the oracle lag that previously caused
+    "Resolution unclear" false-negatives. The winning side is determined by comparing
+    <code>btc_close_price &gt; btc_open_price</code>.
+  </p>
+  <div class="note">
+    <strong>Redemption is handled by a separate bot process.</strong> The trading bot
+    logs <code>condition_id</code> and <code>outcome_index</code> per trade but does not
+    execute on-chain redemption during normal operation. The <code>_redeem_wins()</code>
+    and <code>_startup_redeem_sweep()</code> methods are present in the code but currently
+    disabled (<code>asyncio.create_task</code> calls commented out).
+  </div>
+
+  <!-- ── FOOTER ── -->
+  <div style="margin-top:64px; padding-top:24px; border-top:1px solid var(--rule); font-size:11px; color:var(--ink-faint); display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+    <span>polybot · strategy_v2.py · bot.py</span>
+    <span>generated 2026-05-28</span>
+  </div>
+
+</div>
+</body>
+</html>
