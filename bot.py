@@ -417,7 +417,7 @@ class TradingBot:
                 resp = place_maker_order(
                     self.client,
                     trade["token_id"],
-                    price=trade.get("max_price", trade["maker_price"]),
+                    price=trade.get("maker_price", trade["price"]),
                     size=trade["shares"],
                 )
                 order_id = resp.get("orderID") or resp.get("id")
@@ -513,7 +513,7 @@ class TradingBot:
                 resp = place_maker_order(
                     self.client,
                     token_id,
-                    price=max_price,
+                    price=trade["price"],
                     size=trade["shares"],
                 )
                 order_id = resp.get("orderID") or resp.get("id")
@@ -806,9 +806,14 @@ class TradingBot:
                 shares = trade.get("shares", bet / price if price > 0 else 0)
 
             if side == winning_side:
-                # Win: each share pays $1.00, we paid $price per share
                 profit = shares * (1.0 - price)
-                self.bankroll += profit
+                if self.dry_run:
+                    self.bankroll += profit
+                else:
+                    # Actual balance was reduced by locked collateral (= bet) at order
+                    # placement and already reflected by _refresh_bankroll. On win,
+                    # restore that collateral and add the payout profit.
+                    self.bankroll += bet + profit
                 self.wins += 1
                 trade["outcome"] = "win"
                 trade["pnl"] = round(profit, 2)
@@ -817,8 +822,11 @@ class TradingBot:
                     f"+${profit:.2f} | Bankroll: ${self.bankroll:.2f}"
                 )
             else:
-                # Loss: we lose the bet amount
-                self.bankroll -= bet
+                if self.dry_run:
+                    self.bankroll -= bet
+                # Live: locked collateral was already deducted from the actual balance
+                # when the order was placed, and _refresh_bankroll synced that state.
+                # Subtracting here would double-count the loss.
                 self.losses += 1
                 trade["outcome"] = "loss"
                 trade["pnl"] = round(-bet, 2)
