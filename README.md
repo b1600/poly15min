@@ -1,5 +1,7 @@
 # Poly15min — Polymarket BTC 15-min trading bot
 
+![Poly15min trading bot](assets/bot.png)
+
 Directional bot that trades the BTC Up/Down binary markets on Polymarket. Each market resolves every 15 minutes based on whether BTC closes above or below the window open price. The bot reads live BTC prices from Binance, estimates win probability using an empirically calibrated model, and places GTC or IOC orders when it finds positive expected value.
 
 ---
