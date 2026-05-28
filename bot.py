@@ -444,14 +444,18 @@ class TradingBot:
                 self._monitor_gtc(order_id, order_price, trade["side"], trade["token_id"], trade_record)
             )
 
-    # ── Execution: Scalp (single-shot IOC taker) ──────────────────────
+    # ── Execution: Scalp (GTC maker) ──────────────────────────────────
 
     async def _execute_scalp(self, trade: dict):
         """
-        Single-shot taker scalp:
-        1. Check order book depth — skip if no asks (illiquid).
-        2. Place one IOC order, capped at max_price to keep positive EV.
-        No GTC, no polling, no retry chain.
+        GTC maker scalp: place a resting limit bid at max_price,
+        then monitor for adverse conditions.
+        Same execution path as MOMENTUM — GTC bids fill via NegRisk
+        complement matching and survive through resolution.
+
+        IOC was removed: the target token in NegRisk markets has almost
+        no direct asks at fair value, so IOC sweeps never filled. GTC
+        bids match against the complement side (Up sellers for a Down bid).
         """
         if not self._apply_kelly_throttle(trade):
             return
@@ -469,85 +473,54 @@ class TradingBot:
         order_id = None
 
         if not self.dry_run:
-            # ── Book depth check ─────────────────────────────────
+            # ── Book health check ────────────────────────────────
+            # CLOB API returns asks in descending order (highest first).
+            # Use min(asks) for the true best (lowest) ask.
             try:
                 book = get_book(self.client, token_id)
                 asks = book.asks if book else []
                 bids = book.bids if book else []
 
-                # Log full snapshot so we can distinguish real vs stale/wrong-token books
-                asks_snapshot = [(float(a.price), float(a.size)) for a in asks[:5]]
-                bids_snapshot = [(float(b.price), float(b.size)) for b in bids[:5]]
+                # Show cheapest asks and best bids for signal quality
+                asks_cheap = sorted(
+                    [(float(a.price), float(a.size)) for a in asks],
+                    key=lambda x: x[0],
+                )[:5]
+                bids_best = sorted(
+                    [(float(b.price), float(b.size)) for b in bids],
+                    key=lambda x: -x[0],
+                )[:5]
                 log.info(
                     f"SCALP | book_snapshot token={token_id} | "
-                    f"asks={asks_snapshot} | bids={bids_snapshot}"
+                    f"asks_cheap={asks_cheap} | bids_best={bids_best}"
                 )
 
-                if not asks:
-                    log.info("SCALP | No asks in book — skipping")
-                    return
-                best_ask = float(asks[0].price)
-                # Best ask at near-certainty price = post-resolution book
-                if best_ask >= 0.95:
-                    log.info(
-                        f"SCALP | book_anomaly — best ask ${best_ask:.2f} ≥ $0.95, "
-                        f"likely post-resolution book — skipping"
-                    )
-                    self._scalp_cooldown_until = time.time() + 30
-                    return
-                if best_ask > max_price:
-                    log.info(
-                        f"SCALP | Best ask ${best_ask:.2f} exceeds max ${max_price:.2f} — skipping"
-                    )
-                    self._scalp_cooldown_until = time.time() + 30
-                    return
-                log.info(
-                    f"SCALP | Book has {len(asks)} ask level(s), "
-                    f"best ${best_ask:.2f} — proceeding with IOC"
-                )
+                if asks:
+                    best_ask = min(float(a.price) for a in asks)
+                    if best_ask >= 0.95:
+                        log.info(
+                            f"SCALP | book_anomaly — min ask ${best_ask:.2f} ≥ $0.95, "
+                            f"likely post-resolution book — skipping"
+                        )
+                        self._scalp_cooldown_until = time.time() + 30
+                        return
             except Exception as e:
-                log.warning(f"SCALP | Book depth check failed: {e} — skipping")
-                return
+                log.warning(f"SCALP | Book health check failed: {e} — proceeding")
 
-            # Book check passed — lock the scalp slot for this window
+            # Lock the scalp slot and place GTC maker bid
             self.window.scalp_fired = True
-
-            # ── Single IOC order ─────────────────────────────────
-            ioc_filled = False
             try:
-                resp = place_ioc_order(
-                    self.client, token_id, bet_amount, price=max_price
+                resp = place_maker_order(
+                    self.client,
+                    token_id,
+                    price=max_price,
+                    size=trade["shares"],
                 )
                 order_id = resp.get("orderID") or resp.get("id")
-                size_matched = float(
-                    resp.get("size_matched") or resp.get("filled") or 0
-                )
-
-                # The CLOB sometimes returns size_matched=0 in the immediate
-                # POST response even when the IOC filled (match is async).
-                # If size_matched is ambiguous and we have an order_id, do one
-                # follow-up status fetch to get the confirmed fill amount.
-                if size_matched == 0 and order_id:
-                    try:
-                        status = get_order_status(self.client, order_id)
-                        size_matched = float(
-                            status.get("size_matched") or status.get("filled") or 0
-                        )
-                    except Exception as e:
-                        log.warning(f"SCALP | Order status fetch failed: {e}")
-
-                if size_matched > 0:
-                    ioc_filled = True
-                    log.info(
-                        f"SCALP | IOC filled ${size_matched:.2f} | Order: {order_id}"
-                    )
-                else:
-                    log.info(
-                        f"SCALP | IOC no fill at max ${max_price:.2f} — skipping"
-                    )
-                    order_id = None
+                log.info(f"SCALP | GTC resting | Order ID: {order_id}")
             except Exception as e:
-                log.error(f"SCALP | IOC placement failed: {e}")
+                log.error(f"SCALP | GTC placement failed: {e}")
+                return
 
         trade_record = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -562,6 +535,11 @@ class TradingBot:
         self.window.trades.append(trade_record)
         self.trade_log.append(trade_record)
 
+        if order_id and not self.dry_run:
+            asyncio.create_task(
+                self._monitor_gtc(order_id, max_price, trade["side"], token_id, trade_record)
+            )
+
     # ── Rec 5: GTC adverse-fill monitor ───────────────────
 
     async def _monitor_gtc(
@@ -575,9 +553,11 @@ class TradingBot:
         """
         Poll the book every 15s after posting a GTC bid.
         Cancel if adverse conditions appear:
-          1. best_ask < posted_price - 0.02 — signal reversed
-          2. best_bid > posted_price       — stronger buyer appeared (adverse selection)
-          3. single ask ≥ $0.95            — post-resolution book anomaly
+          1. min ask ≥ $0.95  — post-resolution book (no real sellers left)
+          2. best_bid > posted_price — stronger buyer appeared (adverse selection)
+
+        CLOB API returns asks descending (highest first) and bids ascending
+        (lowest first). Use min(asks) and max(bids) for the true best levels.
         """
         await asyncio.sleep(15)  # initial wait before first check
         while True:
@@ -601,16 +581,12 @@ class TradingBot:
                 cancel_reason = None
 
                 if book and book.asks:
-                    best_ask = float(book.asks[0].price)
-                    if best_ask < posted_price - 0.02:
-                        cancel_reason = (
-                            f"ask ${best_ask:.2f} < bid ${posted_price:.2f} − 2¢ (signal reversed)"
-                        )
-                    elif len(book.asks) == 1 and best_ask >= 0.95:
-                        cancel_reason = f"single ask ${best_ask:.2f} ≥ $0.95 (post-resolution book)"
+                    best_ask = min(float(a.price) for a in book.asks)
+                    if best_ask >= 0.95:
+                        cancel_reason = f"min ask ${best_ask:.2f} ≥ $0.95 (post-resolution book)"
 
                 if cancel_reason is None and book and book.bids:
-                    best_bid = float(book.bids[0].price)
+                    best_bid = max(float(b.price) for b in book.bids)
                     if best_bid > posted_price:
                         cancel_reason = (
                             f"best_bid ${best_bid:.2f} > our bid ${posted_price:.2f} (adverse selection)"
@@ -635,25 +611,25 @@ class TradingBot:
     async def _cleanup_window(self):
         """Cancel resting GTC orders at window close.
 
-        MOMENTUM GTC orders are intentionally left open — they get
-        extra fill time equal to RESOLUTION_WAIT before the background task
-        cancels them. All other orders (scalp_gtc, etc.) are cancelled now.
+        MOMENTUM, SCALP, and VELOCITY GTC orders are intentionally left
+        open — they get extra fill time equal to RESOLUTION_WAIT before
+        the background task cancels them. All other orders are cancelled now.
         """
         if not self.dry_run and self.client:
-            # Determine if any MOMENTUM orders need to survive
+            # Determine if any GTC orders need to survive through resolution
             surviving = [
                 t for t in self.window.trades
                 if t.get("status") == "pending"
                 and t.get("order_id")
-                and t.get("strategy") in ("momentum",)
+                and t.get("strategy") in ("momentum", "scalp", "velocity")
             ]
 
             if surviving:
-                # Cancel non-MOMENTUM orders individually; leave survivors open
+                # Cancel non-GTC orders individually; leave survivors open
                 for trade in self.window.trades:
                     if trade.get("status") != "pending" or not trade.get("order_id"):
                         continue
-                    if trade.get("strategy") in ("momentum",):
+                    if trade.get("strategy") in ("momentum", "scalp", "velocity"):
                         log.info(
                             f"CLEANUP | {trade.get('strategy','?')} GTC left open "
                             f"(+{RESOLUTION_WAIT}s extra lifetime) | "

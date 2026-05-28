@@ -1,5 +1,6 @@
 # executor.py
 from py_clob_client_v2 import ClobClient, ApiCreds, OrderArgs, MarketOrderArgs, OrderType, OrderPayload, Side
+from py_clob_client_v2.client import Signer
 from dotenv import load_dotenv
 import logging
 import os
@@ -192,12 +193,30 @@ def init_client():
         api_secret=os.getenv("POLY_API_SECRET"),
         api_passphrase=os.getenv("POLY_API_PASSPHRASE"),
     )
+    private_key = os.getenv("POLY_PRIVATE_KEY")
+    funder = os.getenv("POLY_FUNDER_ADDRESS")
+    sig_type = int(os.getenv("POLY_SIGNATURE_TYPE", "0"))
+
+    # Auto-detect proxy wallet: if POLY_FUNDER_ADDRESS differs from the raw
+    # EOA derived from POLY_PRIVATE_KEY, this is a Polymarket proxy wallet
+    # account and needs POLY_PROXY signature type (1), not EOA (0).
+    # EOA (0) triggers "maker address not allowed, use deposit wallet flow".
+    if sig_type == 0 and funder and private_key:
+        signer_addr = Signer(private_key, 137).address().lower()
+        if funder.lower() != signer_addr:
+            log.warning(
+                "POLY_FUNDER_ADDRESS differs from signer EOA — auto-selecting "
+                "POLY_PROXY signature type (1). Add POLY_SIGNATURE_TYPE=1 to "
+                ".env to suppress this warning."
+            )
+            sig_type = 1
+
     client = ClobClient(
         host=os.getenv("CLOB_HOST"),
-        key=os.getenv("POLY_PRIVATE_KEY"),
+        key=private_key,
         chain_id=137,
-        signature_type=int(os.getenv("POLY_SIGNATURE_TYPE", "0")),
-        funder=os.getenv("POLY_FUNDER_ADDRESS"),
+        signature_type=sig_type,
+        funder=funder,
         creds=creds,
     )
     return client
@@ -323,8 +342,9 @@ def get_clob_mid(client, token_id) -> float | None:
         book = client.get_order_book(token_id)
         if not book or not book.bids or not book.asks:
             return None
-        best_bid = float(book.bids[0].price)
-        best_ask = float(book.asks[0].price)
+        # CLOB API returns asks descending (highest first), bids ascending (lowest first).
+        best_bid = max(float(b.price) for b in book.bids)
+        best_ask = min(float(a.price) for a in book.asks)
         if best_ask >= 0.95:
             return None
         return (best_bid + best_ask) / 2
