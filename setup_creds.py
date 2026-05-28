@@ -1,5 +1,5 @@
 # setup_creds.py — run once to generate API credentials
-from py_clob_client.client import ClobClient
+from py_clob_client_v2.client import ClobClient
 from dotenv import load_dotenv
 import os
 
@@ -13,7 +13,7 @@ client = ClobClient(
     funder=os.getenv("POLY_FUNDER_ADDRESS"),
 )
 
-creds = client.create_or_derive_api_creds()
+creds = client.create_or_derive_api_key()
 print("Add these to your .env file:")
 print(f"POLY_API_KEY={creds.api_key}")
 print(f"POLY_API_SECRET={creds.api_secret}")
