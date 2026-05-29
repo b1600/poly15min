@@ -18,6 +18,8 @@ import time
 import requests
 from collections import defaultdict
 
+import physical_model
+
 # ── Replicated from strategy_v2 (no import needed) ─────────────────────────
 
 def _normal_cdf(x):
@@ -538,13 +540,207 @@ def load_calibration_table(path: str) -> dict | None:
         return None
 
 
+# ── Parametric model fitting (Part A) ────────────────────────────────────────
+
+# Dense entry points (one per minute) so the fit sees the full range of
+# horizons; z normalizes for time, so all points share one (gamma, beta).
+FIT_TARGET_SECS = list(range(840, 59, -60))  # 840, 780, ..., 120, 60
+
+# Map a vol lookback (minutes) to the coeffs label and the live calib-log field.
+_VOL_HORIZON_LABEL = {5: ("5m", "vol_5m"), 15: ("15m", "vol_15m"), 60: ("60m", "vol_60m")}
+
+
+def _minute_index(klines: list):
+    """Sort klines into a contiguous 1-min series with lookup maps."""
+    bars = [(b[0] // 1000, float(b[1]), float(b[4])) for b in klines]  # ts, open, close
+    bars.sort()
+    closes = [c for _, _, c in bars]
+    ts_to_idx = {ts: i for i, (ts, _, _) in enumerate(bars)}
+    open_by_ts = {ts: o for ts, o, _ in bars}
+    close_by_ts = {ts: c for ts, _, c in bars}
+    return closes, ts_to_idx, open_by_ts, close_by_ts
+
+
+def _trailing_vol_persec(closes: list, gi: int, lookback_min: int):
+    """
+    Per-second realized vol from `lookback_min` 1-min returns ending at index
+    `gi` (inclusive). No look-ahead. Returns None if history is insufficient.
+
+    Matches price_feed.get_volatility: population std of simple returns. The
+    1-min std is scaled to per-second by /sqrt(60) under the iid assumption,
+    so it lines up with the live per-second ambient vol the model consumes.
+    """
+    if gi - lookback_min < 0:
+        return None
+    seg = closes[gi - lookback_min: gi + 1]  # lookback_min+1 closes -> lookback_min returns
+    rets = [(seg[i + 1] - seg[i]) / seg[i] for i in range(len(seg) - 1) if seg[i] != 0]
+    if len(rets) < lookback_min:
+        return None
+    mean = sum(rets) / len(rets)
+    var = sum((r - mean) ** 2 for r in rets) / len(rets)
+    sigma_1min = var ** 0.5
+    if sigma_1min <= 0:
+        return None
+    return sigma_1min / math.sqrt(60.0)
+
+
+def build_physical_dataset(klines: list, vol_lookback_min: int = 15) -> list[dict]:
+    """
+    Build (secs, delta, vol, z, y) rows across all reconstructable windows.
+
+    Outcome y = 1 if the window closed up. Flat windows are dropped. Ambient
+    vol is a trailing realized vol that spans the window boundary, matching the
+    live regime-scale vol rather than a within-window estimate.
+    """
+    closes, ts_to_idx, open_by_ts, close_by_ts = _minute_index(klines)
+    if not ts_to_idx:
+        return []
+
+    all_ts = sorted(ts_to_idx)
+    start = all_ts[0] - (all_ts[0] % WINDOW_SECS)
+    end = all_ts[-1] - (all_ts[-1] % WINDOW_SECS)
+
+    rows = []
+    t = start
+    while t < end:
+        w_open = open_by_ts.get(t)
+        w_close = close_by_ts.get(t + (N_MINUTES - 1) * 60)
+        if w_open is None or w_close is None or w_open == 0 or w_close == w_open:
+            t += WINDOW_SECS
+            continue
+        y = 1 if w_close > w_open else 0
+
+        for secs in FIT_TARGET_SECS:
+            minute_idx = (WINDOW_SECS - secs) // 60
+            cur_ts = t + minute_idx * 60
+            gi = ts_to_idx.get(cur_ts)
+            price = open_by_ts.get(cur_ts)
+            if gi is None or price is None:
+                continue
+            vol = _trailing_vol_persec(closes, gi, vol_lookback_min)
+            if vol is None:
+                continue
+            delta = (price - w_open) / w_open
+            z = physical_model.z_score(delta, secs, vol)
+            if z is None:
+                continue
+            rows.append({"secs": secs, "delta": delta, "vol": vol, "z": z, "y": y})
+        t += WINDOW_SECS
+
+    return rows
+
+
+def _brier(probs, ys):
+    return sum((p - y) ** 2 for p, y in zip(probs, ys)) / len(ys)
+
+
+def print_physical_report(rows: list[dict], coeffs: dict):
+    """In-sample calibration of the fitted parametric model."""
+    ys = [r["y"] for r in rows]
+    probs = [
+        physical_model.prob_up(r["delta"], r["secs"], r["vol"], coeffs)
+        for r in rows
+    ]
+    base = sum(ys) / len(ys)
+
+    print("\n" + "=" * 64)
+    print("PARAMETRIC MODEL FIT  (logistic on z = delta / (vol*sqrt(tau)))")
+    print("=" * 64)
+    print(f"  Samples            : {len(rows):,}")
+    print(f"  Vol horizon        : {coeffs['vol_horizon']} (trailing realized)")
+    print(f"  Base Up rate       : {base:.4f}")
+    print(f"  gamma (intercept)  : {coeffs['beta'][0]:+.4f}")
+    print(f"  beta  (z slope)    : {coeffs['beta'][1]:+.4f}")
+    print(f"  In-sample Brier    : {_brier(probs, ys):.5f}  (base {_brier([base]*len(ys), ys):.5f})")
+
+    # Reliability (deciles)
+    print("\n  Reliability (in-sample)")
+    print(f"  {'bin':>11}  {'N':>6}  {'pred':>6}  {'actual':>7}  {'gap':>7}")
+    print(f"  {'-'*11}  {'-'*6}  {'-'*6}  {'-'*7}  {'-'*7}")
+    bins = 10
+    buckets = [{"n": 0, "ps": 0.0, "w": 0} for _ in range(bins)]
+    for p, y in zip(probs, ys):
+        idx = min(bins - 1, max(0, int(p * bins)))
+        buckets[idx]["n"] += 1
+        buckets[idx]["ps"] += p
+        buckets[idx]["w"] += y
+    for i, b in enumerate(buckets):
+        if not b["n"]:
+            continue
+        pred = b["ps"] / b["n"]
+        act = b["w"] / b["n"]
+        print(f"  {i/bins:.2f}-{(i+1)/bins:.2f}  {b['n']:6d}  {pred:6.3f}  {act:7.3f}  {act-pred:+7.3f}")
+
+    # Per-horizon residual: does one (gamma,beta) hold across time?
+    print("\n  Per-horizon mean pred vs actual (checks z time-normalization)")
+    print(f"  {'secs':>6}  {'N':>6}  {'pred':>6}  {'actual':>7}  {'gap':>7}")
+    print(f"  {'-'*6}  {'-'*6}  {'-'*6}  {'-'*7}  {'-'*7}")
+    by_secs = defaultdict(lambda: {"n": 0, "ps": 0.0, "w": 0})
+    for r, p in zip(rows, probs):
+        d = by_secs[r["secs"]]
+        d["n"] += 1
+        d["ps"] += p
+        d["w"] += r["y"]
+    for secs in sorted(by_secs, reverse=True):
+        d = by_secs[secs]
+        pred = d["ps"] / d["n"]
+        act = d["w"] / d["n"]
+        print(f"  {secs:6d}  {d['n']:6d}  {pred:6.3f}  {act:7.3f}  {act-pred:+7.3f}")
+
+
+def fit_physical_model(
+    days: int = 90,
+    vol_lookback_min: int = 15,
+    save_path: str = "physical_model.json",
+) -> dict:
+    """Fetch klines, build the dataset, fit logistic(gamma+beta*z), and save coeffs."""
+    now_ms = int(time.time() * 1000)
+    start_ms = now_ms - days * 24 * 3600 * 1000
+
+    print(f"Fetching {days} days of BTC/USDT 1m klines...")
+    klines = fetch_klines("BTCUSDT", "1m", start_ms, now_ms)
+    print(f"  Got {len(klines):,} bars")
+
+    rows = build_physical_dataset(klines, vol_lookback_min=vol_lookback_min)
+    if not rows:
+        print("  No usable rows — aborting.")
+        return {}
+
+    z_vals = [r["z"] for r in rows]
+    ys = [r["y"] for r in rows]
+    coeffs = physical_model.fit(z_vals, ys)
+
+    label, log_field = _VOL_HORIZON_LABEL.get(vol_lookback_min, (f"{vol_lookback_min}m", None))
+    coeffs.update({
+        "vol_horizon": label,
+        "vol_lookback_min": vol_lookback_min,
+        "log_field": log_field,
+        "trained_on": {
+            "days": days,
+            "windows_sampled": len({r["secs"] for r in rows}) and len(rows),
+            "fit_date": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        },
+    })
+
+    print_physical_report(rows, coeffs)
+    physical_model.save_coeffs(coeffs, save_path)
+    print(f"\n  Saved coeffs -> {save_path}")
+    return coeffs
+
+
 def main():
     parser = argparse.ArgumentParser(description="Calibrate BTC 15-min probability model")
     parser.add_argument("--days", type=int, default=30, help="Days of history (default 30)")
     parser.add_argument("--plot", action="store_true", help="Generate matplotlib plot")
     parser.add_argument("--min-n", type=int, default=30, help="Min samples per bucket (default 30)")
     parser.add_argument("--table", action="store_true", help="Output 2D delta×secs lookup table")
+    parser.add_argument("--fit-physical", action="store_true", help="Fit the parametric logistic(z) model and save physical_model.json")
+    parser.add_argument("--vol-horizon", type=int, default=15, choices=[5, 15, 60], help="Ambient vol lookback in minutes for z (default 15)")
     args = parser.parse_args()
+
+    if args.fit_physical:
+        fit_physical_model(days=args.days, vol_lookback_min=args.vol_horizon)
+        return
 
     now_ms = int(time.time() * 1000)
     start_ms = now_ms - args.days * 24 * 3600 * 1000

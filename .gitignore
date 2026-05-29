@@ -15,3 +15,5 @@ build/
 trade_log.json
 calibration_table.json
 calibration_log.json
+calibration_log.jsonl
+physical_model.json

@@ -1,0 +1,57 @@
+29 May 2026 11:21 
+Calibration
+
+I've now traced the full model and data path. Here's my analysis and proposal.
+
+  What the model does today
+
+  _estimate_prob_from_delta(delta, seconds_remaining, vol) (strategy_v2.py:651) is a 2D empirical lookup table: 4 time rows {720, 540, 360, 180}s × delta% buckets → historical P(Up wins), bilinearly
+  interpolated. The table is built by calibrate_model.build_2d_table (calibrate_model.py:419) from 90 days of Binance 1-min klines — pure physical win rates.
+
+  Crucially, the live book is never used as a probability benchmark. It only appears as the price you pay: edge = prob_win − market_price (strategy_v2.py:251), where market_price is the Gamma mid
+  (outcomePrices), and you execute at live_ask (bot.py:376). The only in-vivo calibration check is the Kelly throttle comparing realized win rate to mean model prob over 20 trades (bot.py:868) — never
+  against the book.
+
+  Where it's miscalibrated
+
+  1. Volatility is thrown away. vol is accepted then ignored (strategy_v2.py:656); the docstring claims the table "encodes regime-average volatility." But a 0.20% delta is ~1σ in a calm regime and ~0.3σ in a
+   volatile one — wildly different P(win). The infra to fix this already exists and is unused: get_vol_regime / get_vol_multi (price_feed.py:252, 285). This is the single biggest error.
+  2. Everything under T-180s uses the 180s row unchanged (strategy_v2.py:668). That's exactly Phase 4, where the scalp fires hardest and exits run continuously. At T-30s a position is nearly settled, but the
+   model prices it as if 180s remain — it badly understates certainty and corrupts both entries and evaluate_exits.
+  3. Overfit extremes. Cells like 0.40→1.0, -0.30→0.0 come from min_n=20 samples (calibrate_model.py:563). A raw 1.0 from 20 trials has a true value closer to ~0.85. No shrinkage; the runtime [0.05, 0.95]
+  clamp is a blunt patch.
+  4. Non-monotone noise. In the 720s row, 0.20→0.8182 but 0.25→0.8172 — P(win) drops as the move grows. Linear interpolation faithfully reproduces the noise.
+  5. Train/serve skew. The table is built on 1-min open snapshots; live uses sub-second ticks and a tick-captured window open. Small but systematic.
+  6. No book anchor / de-vig. Edge is computed off the Gamma mid, but the two outcome prices carry the market's own probability estimate. The model has never been scored against it, so you can't tell whether
+   a "5% edge" is real mispricing or just model error.
+
+  Proposed model
+
+  Part A — a parametric, vol-conditioned physical model (replaces the 2D table)
+
+  P(Up) = Φ( β(τ)·z + γ(τ) ),  where  z = delta / (σ̂ · √τ)
+
+  - σ̂ = live realized per-second vol from get_volatility; τ = seconds_remaining. This is the driftless-Brownian barrier probability — the model the original code had (calibrate_model.py:38) before the table
+  replaced it.
+  - β(τ), γ(τ) are fit by probit/logistic regression on historical windows (β corrects BTC's fat tails / short-horizon mean-reversion; γ captures any up-drift). A handful of coefficients instead of ~80 noisy
+   cells.
+  - This is smooth, monotone, vol-conditioned, and continuous in time — fixing flaws 1–5 at once, including the sub-180s gap, because √τ scaling extrapolates correctly to T-30s.
+
+  If you'd rather keep the empirical/non-parametric flavor: add vol regime as a third axis (secs × {low,med,high} × delta) with beta-binomial shrinkage toward the parametric curve. Same idea, more
+  data-hungry.
+
+  Part B — measure and anchor against the live book
+1. De-vig the book into an implied probability: p_book_up = mid_up / (mid_up + mid_down) (both prices are already in the market dict; or use get_book best bid/ask for tighter quotes).
+  2. Log per eval tick: (ts, secs_remaining, delta, vol_regime, p_model, p_book, ask_paid), then stamp the outcome at resolution (bot.py:801). This is the dataset that makes "calibrated against the live
+  book" measurable.
+  3. Offline eval harness: compute Brier score and log-loss for p_model vs p_book, plus reliability curves. The acceptance bar is a positive Brier skill score vs the book — if the model can't beat the
+  de-vigged book out-of-sample, there's no edge to trade.
+  4. Blend: p_final = w·p_model + (1−w)·p_book, with w fit to minimize out-of-sample log loss. The book is a strong baseline; your edge is the residual the model adds on top of it. Trade p_final vs the ask —
+   this also naturally shrinks bets where the book already agrees.
+
+  Suggested rollout
+
+  Ship Part B's logging first (cheap, non-invasive) so you accumulate model-vs-book data while the current table keeps trading. Once you have a few thousand ticks, fit Part A's β/γ and the blend weight
+  against that live dataset, and gate the switch on the Brier skill score.
+
+  Want me to implement any of these? I'd suggest starting with the book-implied logging + offline Brier harness, since it's low-risk and unblocks validating everything else.

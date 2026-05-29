@@ -339,7 +339,9 @@ def get_clob_mid(client, token_id) -> float | None:
     (post-resolution sentinel).
     """
     try:
-        book = client.get_order_book(token_id)
+        # Use get_book, which normalizes the raw-dict shape the CLOB API
+        # sometimes returns into an object with .bids/.asks.
+        book = get_book(client, token_id)
         if not book or not book.bids or not book.asks:
             return None
         # CLOB API returns asks descending (highest first), bids ascending (lowest first).

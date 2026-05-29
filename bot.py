@@ -27,6 +27,7 @@ from market_discovery import (
 from price_feed import BinancePriceFeed
 from strategy_v2 import CombinedStrategy, update_empirical_table
 import calibrate_model
+import calib_log
 from executor import (
     init_client,
     place_maker_order,
@@ -103,6 +104,10 @@ logging.basicConfig(
     level=logging.INFO,
     handlers=[_file_handler, _console_handler, _telegram_handler],
 )
+# Drop httpx's per-request "HTTP Request: GET ..." lines — the eval loop polls the
+# book every few seconds, so these flood the log without adding signal.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 log = logging.getLogger("bot")
 
 # ── Configuration ──────────────────────────────────────────
@@ -118,6 +123,14 @@ REDEEM_MAX_AGE = 86400       # give up on a pending redemption after 24h
 CALIBRATION_TABLE_PATH = "calibration_table.json"
 CALIBRATION_DAYS = 90        # days of kline history used for each calibration run
 CALIBRATION_INTERVAL = 86400 # recalibrate every 24h
+
+# ── Calibration logging (model P(win) vs live book) ───────────────────────
+# A decoupled per-window sampler records model vs book-implied probabilities
+# for offline Brier scoring. Read-only: never places or alters orders.
+CALIB_LOG_ENABLED = os.getenv("CALIB_LOG", "1").lower() not in ("0", "false", "no", "")
+CALIB_LOG_PATH = os.getenv("CALIB_LOG_PATH", "calibration_log.jsonl")
+CALIB_SAMPLE_INTERVAL = int(os.getenv("CALIB_SAMPLE_INTERVAL", "15"))  # seconds between samples
+CALIB_CAPTURE_CLOB = os.getenv("CALIB_CLOB", "1").lower() not in ("0", "false", "no", "")
 
 
 
@@ -142,6 +155,9 @@ class WindowState:
         # Order tracking
         self.trades: list[dict] = []
 
+        # Calibration sampler buffer: model-vs-book ticks, flushed at resolution
+        self.calib_ticks: list[dict] = []
+
         # Flags
         self.momentum_fired = False
         self.scalp_fired = False
@@ -163,7 +179,10 @@ class WindowState:
 class TradingBot:
     def __init__(self, dry_run: bool = False):
         self.dry_run = dry_run
-        self.client = None if dry_run else init_client()
+        # Always init the client: in dry-run it is used for read-only market data
+        # (live book fetches) so the same code path runs; all order placement and
+        # cancellation calls are guarded by `not self.dry_run`.
+        self.client = init_client()
         if dry_run:
             self.bankroll = float(os.getenv("STARTING_BANKROLL", 100.0))
         else:
@@ -287,8 +306,16 @@ class TradingBot:
             f"Bankroll: ${self.bankroll:.2f}"
         )
 
+        # ── Calibration sampler (decoupled; read-only, no order side effects) ─
+        calib_task = None
+        if CALIB_LOG_ENABLED:
+            calib_task = asyncio.create_task(self._calib_sample_loop(self.window))
+
         # ── Inner evaluation loop (5s ticks, 15-min window) ─
         await self._eval_loop()
+
+        if calib_task is not None:
+            calib_task.cancel()
 
         # ── End-of-window cleanup ──────────────────────────
         await self._cleanup_window()
@@ -363,6 +390,17 @@ class TradingBot:
                 market, available, self.price_feed, seconds_remaining
             )
 
+            if result:
+                sd = market[result["side"]]
+                result["gamma_price"] = sd.get("gamma_price")
+                result["live_ask"] = sd["price"]
+                log.info(
+                    f"PRICE-CHECK | {result['side']} "
+                    f"gamma=${(result['gamma_price'] or 0):.2f} "
+                    f"live_ask=${result['live_ask']:.2f} "
+                    f"prob={result['estimated_prob']:.2f} edge={result['edge']:.3f}"
+                )
+
             if phase == "momentum" and not self.window.momentum_fired:
                 await self._execute_directional(result, "MOMENTUM")
                 self.window.momentum_fired = True
@@ -376,6 +414,46 @@ class TradingBot:
             # Sleep until next tick
             sleep_time = min(EVAL_INTERVAL, max(1, seconds_remaining - 3))
             await asyncio.sleep(sleep_time)
+
+    # ── Calibration sampler ────────────────────────────────
+
+    async def _calib_sample_loop(self, window: "WindowState"):
+        """
+        Decoupled per-window sampler for model-vs-book calibration data.
+
+        Every CALIB_SAMPLE_INTERVAL seconds it snapshots the model's P(Up) and
+        the de-vigged book-implied P(Up), buffering them on the window. Outcomes
+        are stamped and flushed to disk later, in _resolve_window_background.
+
+        Runs independently of the trading eval loop so it captures the full
+        window (including the final seconds the eval loop skips) and never
+        affects order placement. All failures are swallowed — calibration
+        logging must never disrupt trading.
+        """
+        while True:
+            secs_remaining = window.window_end - int(time.time())
+            if secs_remaining < 1:
+                break
+            try:
+                if not self.price_feed.is_stale and self.price_feed.window_open_price:
+                    # Raw Gamma fetch (not _fetch_market_safe, which overwrites
+                    # `price` with the best ask). build_tick derives the book-implied
+                    # probability from the CLOB mid directly, with the raw Gamma
+                    # price as fallback.
+                    market = fetch_market(window.slug)
+                    if market:
+                        tick = calib_log.build_tick(
+                            window,
+                            self.price_feed,
+                            market,
+                            self.client,
+                            capture_clob=CALIB_CAPTURE_CLOB,
+                        )
+                        if tick:
+                            window.calib_ticks.append(tick)
+            except Exception as e:
+                log.debug(f"CALIB | sample failed: {e}")
+            await asyncio.sleep(CALIB_SAMPLE_INTERVAL)
 
     # ── Kelly throttle (Rec 4C) ────────────────────────────
 
@@ -698,6 +776,24 @@ class TradingBot:
         await asyncio.sleep(max(0, remaining) + RESOLUTION_WAIT)
 
         window.btc_close_price = self.price_feed.current_price
+
+        # ── Flush calibration ticks (independent of trades) ──
+        # Done here, not in _resolve_window, because that method early-returns
+        # when a window had no trades — but no-trade windows are valuable
+        # calibration data. Flat windows (no clear winner) are dropped.
+        if CALIB_LOG_ENABLED and window.calib_ticks:
+            o, c = window.btc_open_price, window.btc_close_price
+            if o and c and c != o:
+                winning_side = "Up" if c > o else "Down"
+                try:
+                    n = calib_log.flush_window(window, winning_side, CALIB_LOG_PATH)
+                    if n:
+                        log.info(
+                            f"CALIB | flushed {n} ticks → {CALIB_LOG_PATH} "
+                            f"(winner {winning_side})"
+                        )
+                except Exception as e:
+                    log.warning(f"CALIB | flush failed: {e}")
 
         # Check and cancel any MOMENTUM orders that survived cleanup
         if not self.dry_run and self.client:
@@ -1055,10 +1151,40 @@ class TradingBot:
         try:
             market = fetch_market(self.window.slug)
             if market and market.get("accepting_orders", False):
+                self._apply_live_book_prices(market)
                 return market
         except Exception as e:
             log.error(f"Market fetch failed: {e}")
         return None
+
+    def _apply_live_book_prices(self, market: dict) -> None:
+        """Overwrite each side's stale Gamma price with the live CLOB best ask.
+
+        The Gamma `outcomePrices` feed lags the real market by tens of seconds on
+        these 15-min markets, which manufactured phantom edge (the strategy compared
+        a fresh probability against a stale price). The best ask is the realistic
+        taker cost the order will actually pay, so edge becomes real.
+
+        Preserves the original Gamma price as `gamma_price` for instrumentation.
+        On an empty / post-resolution book (best ask >= 0.95) or any fetch failure,
+        sets price to 0.99 so the strategy's `> MAX_BUY_PRICE` (0.85) gate skips the
+        side — a fail-safe that never trades on missing book data.
+        """
+        for side in ("Up", "Down"):
+            side_data = market.get(side)
+            if not side_data or not side_data.get("token_id"):
+                continue
+
+            best_ask = None
+            book = get_book(self.client, side_data["token_id"])
+            if book and book.asks:
+                best_ask = min(float(a.price) for a in book.asks)
+
+            side_data["gamma_price"] = side_data.get("price")
+            if best_ask is None or best_ask >= 0.95:
+                side_data["price"] = 0.99
+            else:
+                side_data["price"] = best_ask
 
     def _is_daily_loss_limit_hit(self) -> bool:
         """Check if we've lost more than the daily limit."""
