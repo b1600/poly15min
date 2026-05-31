@@ -31,7 +31,8 @@ class BinancePriceFeed:
     RECONNECT_BASE_DELAY = 1.0   # seconds
     RECONNECT_MAX_DELAY = 30.0   # seconds
     STALE_THRESHOLD = 10.0       # seconds without update = stale
-    HISTORY_SIZE = 3600          # 60 min of per-second samples (Phase 0 requirement)
+    # 3601 samples = 3600 one-sec returns, enough for the 60-min vol lookback.
+    HISTORY_SIZE = 3601
 
     # EMA smoothing factors (applied on every aggTrade tick)
     _EMA_FAST_ALPHA = 2 / (10 + 1)   # ~10s fast EMA
@@ -282,6 +283,16 @@ class BinancePriceFeed:
         mid = (hi + lo) / 2
         return (hi - lo) / mid if mid > 0 else 0.0
 
+    # Per-second return std cutoffs, annualized via sqrt(31_557_600).
+    #   2.0e-5 ≈ 11% annualized
+    #   5.0e-5 ≈ 28% annualized
+    # Derived from the realized vol_15m distribution in calibration_log.jsonl
+    # (Apr-May 2026): p33 ≈ 2.1e-5, p95 ≈ 7.9e-5. The prior 2e-4 / 5e-4 cutoffs
+    # corresponded to ~112% / ~280% annualized, which BTC almost never touches,
+    # so the regime was pinned to "low" 99.8% of the time.
+    _VOL_LOW_MAX = 2.0e-5
+    _VOL_MED_MAX = 5.0e-5
+
     def get_vol_regime(self) -> str:
         """
         Classify current volatility as 'low', 'medium', or 'high'
@@ -289,19 +300,14 @@ class BinancePriceFeed:
         15-min then 5-min when the feed is young. Returns 'unknown'
         only if fewer than 5 minutes of history have accumulated.
 
-        Thresholds (per-second return std dev):
-          low    < 0.0002  (~28% annualized)
-          medium < 0.0005  (~70% annualized)
-          high   ≥ 0.0005
-
         Used as a conditioning key for the calibration table.
         """
         for lookback in (3600, 900, 300):
             vol = self.get_volatility(lookback=lookback)
             if vol > 0.0:
-                if vol < 0.0002:
+                if vol < self._VOL_LOW_MAX:
                     return "low"
-                if vol < 0.0005:
+                if vol < self._VOL_MED_MAX:
                     return "medium"
                 return "high"
         return "unknown"
