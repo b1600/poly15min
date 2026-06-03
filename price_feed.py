@@ -1,6 +1,7 @@
 # price_feed.py
 import json
 import asyncio
+import math
 import time
 import logging
 import websockets
@@ -250,15 +251,57 @@ class BinancePriceFeed:
 
     # ── Phase 0: volatility regime tracking ───────────────────
 
+    def get_realized_vol_persec(self, lookback_s: int) -> float:
+        """
+        Per-second realized vol from 1-minute returns, matching the kline
+        training pipeline (calibrate_model._trailing_vol_persec):
+            sigma_1min = pop-std of (lookback_s // 60) 1-min simple returns
+            return  sigma_1min / sqrt(60)
+
+        Use this — NOT get_volatility — when feeding the physical model.
+        The raw 1-second-return std is dominated by microstructure quiet
+        seconds (most 1-sec windows have zero trades that move price) and
+        reads ~3x lower than the training scale, which inflates the model's
+        z = delta / (vol * sqrt(tau)) and breaks calibration.
+
+        Requires `lookback_s` to be a multiple of 60 and >= 120. Returns
+        0.0 when history is too short.
+        """
+        if lookback_s < 120 or lookback_s > self.HISTORY_SIZE - 1:
+            return 0.0
+        if len(self.price_history) < lookback_s + 1:
+            return 0.0
+
+        n_returns = lookback_s // 60
+        prices = list(self.price_history)
+        # Most recent N+1 prices spaced 60s apart in the deque, ending at "now".
+        closes = [prices[-1 - i * 60] for i in range(n_returns + 1)]
+        closes.reverse()
+
+        returns = [
+            (closes[i] - closes[i - 1]) / closes[i - 1]
+            for i in range(1, len(closes))
+            if closes[i - 1] != 0
+        ]
+        if len(returns) < n_returns:
+            return 0.0
+        mean = sum(returns) / len(returns)
+        var = sum((r - mean) ** 2 for r in returns) / len(returns)
+        sigma_1min = var ** 0.5
+        if sigma_1min <= 0:
+            return 0.0
+        return sigma_1min / math.sqrt(60.0)
+
     def get_vol_multi(self) -> dict[str, float]:
         """
-        Realized vol over 5 / 15 / 60 minute windows.
-        Returns zeroes for any window with insufficient history.
+        Realized per-second vol over 5 / 15 / 60 minute windows, on the
+        kline-training scale (1-min returns / sqrt(60)). Returns zeroes
+        for any window with insufficient history.
         """
         return {
-            "5min":  self.get_volatility(lookback=300),
-            "15min": self.get_volatility(lookback=900),
-            "60min": self.get_volatility(lookback=3600),
+            "5min":  self.get_realized_vol_persec(lookback_s=300),
+            "15min": self.get_realized_vol_persec(lookback_s=900),
+            "60min": self.get_realized_vol_persec(lookback_s=3600),
         }
 
     def get_ema_trend(self) -> float:
@@ -283,15 +326,18 @@ class BinancePriceFeed:
         mid = (hi + lo) / 2
         return (hi - lo) / mid if mid > 0 else 0.0
 
-    # Per-second return std cutoffs, annualized via sqrt(31_557_600).
-    #   2.0e-5 ≈ 11% annualized
-    #   5.0e-5 ≈ 28% annualized
-    # Derived from the realized vol_15m distribution in calibration_log.jsonl
-    # (Apr-May 2026): p33 ≈ 2.1e-5, p95 ≈ 7.9e-5. The prior 2e-4 / 5e-4 cutoffs
-    # corresponded to ~112% / ~280% annualized, which BTC almost never touches,
-    # so the regime was pinned to "low" 99.8% of the time.
-    _VOL_LOW_MAX = 2.0e-5
-    _VOL_MED_MAX = 5.0e-5
+    # Per-second return std cutoffs on the kline-training scale (1-min-return
+    # std / sqrt(60)). Annualized via sqrt(31_557_600) ≈ 5618.
+    #   3.3e-5 ≈ 19% annualized  (p33 of 30d BTC distribution, 2026-05→06)
+    #   6.5e-5 ≈ 37% annualized  (p80)
+    # The prior 2.0e-5 / 5.0e-5 cutoffs were derived from get_volatility()
+    # (raw 1-sec returns), which is on a different — and per-snapshot more
+    # noisy — scale. Now that get_vol_regime uses get_realized_vol_persec,
+    # the cutoffs must come from the matching distribution.
+    # TODO: re-derive after ~2 weeks of fresh calibration_log.jsonl data
+    # on the fixed scale.
+    _VOL_LOW_MAX = 3.3e-5
+    _VOL_MED_MAX = 6.5e-5
 
     def get_vol_regime(self) -> str:
         """
@@ -300,10 +346,12 @@ class BinancePriceFeed:
         15-min then 5-min when the feed is young. Returns 'unknown'
         only if fewer than 5 minutes of history have accumulated.
 
-        Used as a conditioning key for the calibration table.
+        Uses the same per-second vol scale as get_vol_multi (and the
+        physical model), so the regime label matches the logged vol_*m
+        fields and the model's z normalization.
         """
         for lookback in (3600, 900, 300):
-            vol = self.get_volatility(lookback=lookback)
+            vol = self.get_realized_vol_persec(lookback_s=lookback)
             if vol > 0.0:
                 if vol < self._VOL_LOW_MAX:
                     return "low"

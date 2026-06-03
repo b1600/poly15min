@@ -566,9 +566,10 @@ def _trailing_vol_persec(closes: list, gi: int, lookback_min: int):
     Per-second realized vol from `lookback_min` 1-min returns ending at index
     `gi` (inclusive). No look-ahead. Returns None if history is insufficient.
 
-    Matches price_feed.get_volatility: population std of simple returns. The
-    1-min std is scaled to per-second by /sqrt(60) under the iid assumption,
-    so it lines up with the live per-second ambient vol the model consumes.
+    Matches price_feed.get_realized_vol_persec: population std of 1-min
+    simple returns, scaled to per-second by /sqrt(60) under the iid
+    assumption. NOTE: price_feed.get_volatility (raw 1-sec returns) does
+    NOT match this scale and must not be fed to the physical model.
     """
     if gi - lookback_min < 0:
         return None
